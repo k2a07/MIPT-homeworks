@@ -1,6 +1,5 @@
 #include <stdio.h>
 
-
 void LinearEq (double a, double b);
 
 int main()
@@ -22,15 +21,6 @@ int main()
     LinearEq (a, b);
     }
 
-/*
-1) 1 root      ==> a != 0
-2) no roots    ==> a = 0 and b != 0
-3) infty roots ==> a = 0 and b = 0
-
-
-*/
-
-
 void LinearEq (double a, double b)
     {
     if (a != 0)
@@ -44,6 +34,5 @@ void LinearEq (double a, double b)
 
     if (a == 0 && b == 0)
         printf ("Wow, you're lucky! There are infinite number of roots!");
-
     }
 
