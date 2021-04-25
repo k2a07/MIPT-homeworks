@@ -1,0 +1,503 @@
+USE THEATER
+
+DROP TABLE Decoration_Decoration_Maker;
+DROP TABLE Actor_In_Play;
+DROP TABLE Role_Costume;
+DROP TABLE Actor;
+DROP TABLE Costume;
+DROP TABLE Role;
+DROP TABLE Play;
+DROP TABLE Director;
+DROP TABLE Decoration;
+DROP TABLE Decoration_Maker;
+DROP TABLE Costume_Maker;
+DROP TABLE Play_Info;
+
+--SET DATEFORMAT DMY
+
+CREATE TABLE Play (
+	play_id INT IDENTITY PRIMARY KEY,
+	title_id INT NOT NULL, 
+	play_date DATE,
+	play_time TIME,
+	director_id INT
+);
+
+CREATE TABLE Actor (
+	actor_id INT IDENTITY PRIMARY KEY, 
+	name VARCHAR(25) NOT NULL,
+	surname VARCHAR(25) NOT NULL,
+	born_in DATE,
+	sex VARCHAR(6),
+	rank VARCHAR(50),
+	line VARCHAR(50)
+);
+
+CREATE TABLE Actor_In_Play (
+	actor_id INT NOT NULL,
+	play_id INT NOT NULL,
+	hire_date DATE,
+	removal_date DATE, 
+	role_type VARCHAR(50),
+	cast_number INT,
+	role_id INT, 
+PRIMARY KEY(actor_id, play_id)
+);
+
+CREATE TABLE Role (
+	role_id INT NOT NULL PRIMARY KEY,
+	role_name VARCHAR(25) NOT NULL,
+	line VARCHAR(50),
+	sex VARCHAR(6),
+	title_id INT NOT NULL
+);
+
+CREATE TABLE Costume (
+	costume_id INT NOT NULL PRIMARY KEY,
+	price INT,
+	materials VARCHAR(50),
+	size VARCHAR(3),
+	maker_id INT
+);
+
+CREATE TABLE Role_Costume (
+	role_id INT NOT NULL,
+	costume_id INT NOT NULL,
+PRIMARY KEY (role_id, costume_id)
+);
+
+CREATE TABLE Costume_Maker (
+	maker_id INT NOT NULL PRIMARY KEY,
+	name VARCHAR(25),
+	surname VARCHAR(25),
+	salary INT
+);
+
+CREATE TABLE Director (
+	director_id INT NOT NULL PRIMARY KEY,
+	name VARCHAR(25),
+	surname VARCHAR(25),
+	hire_date DATE,
+	removal_date DATE,
+	salary INT
+);
+
+CREATE TABLE Play_Info (
+	title_id INT NOT NULL PRIMARY KEY,
+	title VARCHAR(100),
+	genre VARCHAR(30),
+	plot_description VARCHAR(2000),
+	duration TIME, 
+	act_number INT
+);
+	
+CREATE TABLE Decoration (
+	decoration_id INT IDENTITY PRIMARY KEY,
+	price INT,
+	materials VARCHAR(50),
+	color VARCHAR(30),
+	title_id INT
+);
+
+CREATE TABLE Decoration_Maker (
+	maker_id INT IDENTITY PRIMARY KEY,
+	name VARCHAR(25),
+	surname VARCHAR(25),
+	salary INT
+);
+
+CREATE TABLE Decoration_Decoration_Maker (
+	decoration_id INT NOT NULL,
+	maker_id INT NOT NULL,
+	PRIMARY KEY (decoration_id, maker_id)
+);
+
+---------------------------------------ALTERING TABLES-------------------------------------------------------- 
+
+ALTER TABLE Play ADD 
+	FOREIGN KEY (title_id) 
+	REFERENCES Play_Info (title_id)
+
+ALTER TABLE Decoration ADD 
+	FOREIGN KEY (title_id) 
+	REFERENCES Play_Info (title_id)
+
+ALTER TABLE Decoration_Decoration_Maker ADD 
+	FOREIGN KEY (decoration_id) 
+	REFERENCES Decoration (decoration_id)
+
+ALTER TABLE Decoration_Decoration_Maker ADD 
+	FOREIGN KEY (maker_id) 
+	REFERENCES Decoration_Maker (maker_id)
+
+ALTER TABLE Play ADD 
+	FOREIGN KEY (director_id) 
+	REFERENCES Director (director_id)
+
+ALTER TABLE Role ADD 
+	FOREIGN KEY (title_id) 
+	REFERENCES Play_Info (title_id)
+
+ALTER TABLE Actor_In_Play ADD 
+	FOREIGN KEY (role_id) 
+	REFERENCES Role (role_id)
+
+ALTER TABLE Actor_In_Play ADD 
+	FOREIGN KEY (play_id) 
+	REFERENCES Play (play_id)
+
+ALTER TABLE Actor_In_Play ADD 
+	FOREIGN KEY (actor_id) 
+	REFERENCES Actor (actor_id)
+
+ALTER TABLE Role_Costume ADD
+	FOREIGN KEY (role_id)
+	REFERENCES Role (role_id)
+
+ALTER TABLE Role_Costume ADD
+	FOREIGN KEY (costume_id)
+	REFERENCES Costume (costume_id) 
+
+ALTER TABLE Costume ADD
+	FOREIGN KEY (maker_id)
+	REFERENCES Costume_Maker (maker_id) 
+
+-----------------!!!!!!!!!!!!!!DATA INSERTING !!!!!!!!!!!!!!--------------------------------------------------------------------
+
+--DIRECTOR INSERTION
+
+INSERT INTO Director VALUES (1, 'Ben', 'Kim', '2000-03-20', NULL, 5000);
+INSERT INTO Director VALUES (2, 'Karl', 'Deulofeu', '1995-07-07', NULL, 5670);
+INSERT INTO Director VALUES (3, 'Sergio', 'Ramos', '2003-06-14', NULL, 10700);
+INSERT INTO Director VALUES (4, 'Igor', 'Zyryanov', '2005-05-20', '2018-11-02', 7500);
+INSERT INTO Director VALUES (5, 'Aanchal', 'Gusev', '2014-04-20', NULL, 7600);
+INSERT INTO Director VALUES (6, 'Timur', 'Mishkin', '2015-03-20', NULL, 9100);
+INSERT INTO Director VALUES (7, 'Gerard', 'Pique', '2015-03-20', '2015-11-26', 10000);
+INSERT INTO Director VALUES (8, 'Steven', 'Spielberg', '2009-02-20', '2019-02-22', 4990);
+INSERT INTO Director VALUES (9, 'Tony', 'Stark', '2015-03-20', '2018-05-23', 6400);
+INSERT INTO Director VALUES (10, 'Ben', 'Son', '2015-03-20', '2019-03-25', 5980);
+INSERT INTO Director VALUES (11, 'Zenley', 'Brown', '1999-07-26', NULL, 6730);
+INSERT INTO Director VALUES (12, 'Larry', 'Page', '2013-05-20', '2017-04-10', 9800);
+INSERT INTO Director VALUES (13, 'Sergey', 'Brin', '2010-02-10', '2020-08-20', 15400);
+INSERT INTO Director VALUES (14, 'John', 'Maxwell', '2012-03-15', '2016-11-30', 20300);
+INSERT INTO Director VALUES (15, 'Wayne', 'Rooney', '2015-03-20', NULL, 5000);
+INSERT INTO Director VALUES (16, 'Mike', 'Prince', '2012-06-06', NULL, 7100);
+INSERT INTO Director VALUES (17, 'Robert', 'Axelrod', '2013-04-01', '2014-03-20', 8500);
+INSERT INTO Director VALUES (18, 'Wendy', 'Rhoades', '2014-05-20', '2017-01-01', 8700);
+INSERT INTO Director VALUES (19, 'Chuck', 'Rhoades', '2012-05-24', NULL, 9800);
+INSERT INTO Director VALUES (20, 'Miley', 'Gonsales', '2010-03-20', '2010-09-20', 11100);
+
+-- DECORATION MAKER INSERTION
+
+INSERT INTO Decoration_Maker VALUES ('Pavel', 'Rogozov', 2000);
+INSERT INTO Decoration_Maker VALUES ('Ivan', 'Denisov', 1900);
+INSERT INTO Decoration_Maker VALUES ('ALexei', 'Rybakov', 2400);
+INSERT INTO Decoration_Maker VALUES ('Mikhail', 'Pavlov', 2500);
+INSERT INTO Decoration_Maker VALUES ('Vladislav', 'Alexeev', 2300);
+INSERT INTO Decoration_Maker VALUES ('Dmitry', 'Romanov', 2100);
+INSERT INTO Decoration_Maker VALUES ('Kirill', 'Stepanov', 2500);
+INSERT INTO Decoration_Maker VALUES ('Igor', 'Kirillov', 2900);
+INSERT INTO Decoration_Maker VALUES ('Pavel', 'Egorov', 2600);
+INSERT INTO Decoration_Maker VALUES ('Andrei', 'Panchenko', 2000);
+
+--COSTUME MAKER INSERTION 
+
+INSERT INTO Costume_Maker VALUES (1, 'Steven', 'Gerrard', 2000);
+INSERT INTO Costume_Maker VALUES (2, 'Andrew', 'Garfield', 2100);
+INSERT INTO Costume_Maker VALUES (3, 'Wolfgang', 'Mozart', 2200);
+INSERT INTO Costume_Maker VALUES (4, 'Igor', 'Akinfeev', 2200);
+INSERT INTO Costume_Maker VALUES (5, 'Ivan', 'Rakitic', 2250);
+INSERT INTO Costume_Maker VALUES (6, 'Timur', 'Kirsanov', 3100);
+INSERT INTO Costume_Maker VALUES (7, 'Evgeniy', 'Bazarov', 2770);
+INSERT INTO Costume_Maker VALUES (8, 'Andei', 'Kirsanov', 5000);
+INSERT INTO Costume_Maker VALUES (9, 'Mark', 'Pelevin', 12000);
+INSERT INTO Costume_Maker VALUES (10, 'Roman', 'Zhukov', 2300);
+
+-- ACTOR INSERTION
+
+INSERT INTO Actor VALUES('James', 'Madisson', '2003-01-20', 'MALE', NULL, 'HERO');
+INSERT INTO Actor VALUES('Jeremy',   'Renn',    '1971-06-28', 'MALE', NULL, 'HERO');
+INSERT INTO Actor VALUES('Vladimir', 'Mashkov', '1963-11-27','MALE', 'Actor of Russian peple', 'HERO');
+INSERT INTO Actor VALUES('Marta', 'Krasnova', '2001-06-20', 'FEMALE', NULL, 'INGENUE');
+INSERT INTO Actor VALUES('Anton', 'Lapenko', '1986-09-01', 'MALE', NULL, NULL);
+INSERT INTO Actor VALUES('Peter', 'Stamford', '2004-12-12', 'MALE', NULL, 'VILLAIN');
+INSERT INTO Actor VALUES('Miron', 'Fedorov', '1999-09-01', 'MALE', NULL, 'HERO');
+INSERT INTO Actor VALUES('Roman', 'Mulyarenko', '2005-12-21', 'MALE', NULL, 'TYRANT');
+INSERT INTO Actor VALUES('Bulat', 'Shagohodov', '1955-01-15', 'MALE', NULL, 'HERO');
+INSERT INTO Actor VALUES('Igor', 'Antonov', '1982-04-04', 'MALE', NULL, 'REASONER');
+INSERT INTO Actor VALUES('Ashley', 'Barns', '1959-02-02', 'MALE', NULL, 'SERVANT');
+INSERT INTO Actor VALUES('Paul', 'Bettany', '1971-05-28', 'MALE', NULL, 'KING');
+INSERT INTO Actor VALUES('Alina', 'Makarova', '1988-09-28', 'FEMALE', NULL, 'LOVER');
+INSERT INTO Actor VALUES('Lidiya', 'Krasnobaeva', '1993-04-21', 'FEMALE', NULL, 'PRINCESS');
+INSERT INTO Actor VALUES('Anastasiya', 'Serebryanaya', '1968-06-15', 'FEMALE', NULL, 'SOUBRETTE');
+INSERT INTO Actor VALUES('Mark', 'Splinter', '1965-01-22', 'MALE', NULL, 'TRAVESTY');
+INSERT INTO Actor VALUES('Karl', 'Bezos', '2000-08-29', 'MALE', NULL, 'MORALIST');
+INSERT INTO Actor VALUES('Elizaveta', 'Premudraya', '1999-09-09', 'FEMALE', NULL, 'TYRANT');
+INSERT INTO Actor VALUES('Inna', 'Khorosheve', '1977-07-07', 'FEMALE', NULL, 'TRAVESTY');
+INSERT INTO Actor VALUES('Patrick', 'Brown', '1963-03-20', 'MALE', NULL, 'CLOWN');
+INSERT INTO Actor VALUES('Dmitry', 'Nagiev', '1967-04-04', 'MALE', NULL, 'HERO');
+INSERT INTO Actor VALUES('Roma', 'Zhelty', '1969-04-04', 'MALE', NULL, 'HERO');
+INSERT INTO Actor VALUES('Igor', 'Rybakov', '1963-04-04', 'MALE', NULL, 'HERO');
+INSERT INTO Actor VALUES('Oscar', 'Hartmann', '1955-04-04', 'MALE', NULL, 'HERO');
+INSERT INTO Actor VALUES('John', 'Rockfeller', '1987-04-04', 'MALE', NULL, 'HERO');
+
+-- PLAY INFO INSERTION
+
+INSERT INTO Play_Info VALUES (1, 'Karmen', 'Comedy, Opera', 'Soldiers in a square in front of a cigarette factory in Seville. During the break the workers flock to the square. Carmen, a beautiful worker, is constantly surrounded by men and she loves playing with them. The soldier Don Jose is not interested in her. This irritates the gypsy Carmen and she throws him a flower. This ignites Josй. Micaela, a girl from his village, appears and gives him greetings from his mother and tells him that she is ill. Noise comes from the cigarette factory. Carmen has instigated a stabbing and Don Josй has to arrest her. Josй, already in love with Carmen, lets her go.', '04:00:00', 4);
+INSERT INTO Play_Info VALUES (2, 'A Midsummer Night"s Dream', 'Comedy', 'The play consists of four interconnecting plots, connected by a celebration of the wedding of Duke Theseus of Athens and the Amazon queen, Hippolyta, which are set simultaneously in the woodland and in the realm of Fairyland, under the light of the moon.', '04:00:00', 4);
+INSERT INTO Play_Info VALUES (3, 'Revizor', 'Comedy', 'The corrupt officials of a small Russian town, headed by the Mayor, react with terror to the news that an incognito inspector (the incognito one) will soon be arriving in their town to investigate them. The flurry of activity to cover up their considerable misdeeds is interrupted by the report that a suspicious person has arrived two weeks previously from Saint Petersburg and is staying at the inn. That person, however, is not an inspector; it is Khlestakov, a foppish civil servant with a wild imagination.', '03:30:00', 3);
+INSERT INTO Play_Info VALUES (4, 'Eugene Onegin', 'Opera', 'In the 1820s, Eugene Onegin is a bored St. Petersburg dandy, whose life consists of balls, concerts, parties, and nothing more. Upon the death of a wealthy uncle, he inherits a substantial fortune and a landed estate. When he moves to the country, he strikes up a friendship with his neighbor, a starry-eyed young poet named Vladimir Lensky. Lensky takes Onegin to dine with the family of his fiancйe, the sociable but rather thoughtless Olga Larina.', '03:00:00', 3);
+INSERT INTO Play_Info VALUES (5, 'Little Tragedies', 'Tragedy', '', '01:30:00', 1);
+
+--PLAY WITH TITLE_ID #1 INSERTION
+
+INSERT INTO Play VALUES (1, '2003-01-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2003-02-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2003-03-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2003-04-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2003-05-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2003-06-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2003-07-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2003-08-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2003-09-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2003-10-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2003-11-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2018-09-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2018-03-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2019-09-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2019-06-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2020-01-20', '19:00:00', 1);
+INSERT INTO Play VALUES (1, '2020-03-20', '19:00:00', 1);
+
+--PLAY WITH TITLE_ID #2 INSERTION
+
+INSERT INTO Play VALUES (2, '2004-01-20', '19:00:00', 2);
+INSERT INTO Play VALUES (2, '2004-02-20', '19:00:00', 2);
+INSERT INTO Play VALUES (2, '2004-03-20', '19:00:00', 2);
+INSERT INTO Play VALUES (2, '2004-04-20', '19:00:00', 2);
+INSERT INTO Play VALUES (2, '2004-05-20', '19:00:00', 2);
+INSERT INTO Play VALUES (2, '2004-06-20', '19:00:00', 2);
+INSERT INTO Play VALUES (2, '2004-07-20', '19:00:00', 2);
+INSERT INTO Play VALUES (2, '2004-08-20', '19:00:00', 2);
+INSERT INTO Play VALUES (2, '2004-09-20', '19:00:00', 2);
+INSERT INTO Play VALUES (2, '2004-10-20', '19:00:00', 2);
+INSERT INTO Play VALUES (2, '2004-11-20', '19:00:00', 2);
+INSERT INTO Play VALUES (2, '2004-12-20', '19:00:00', 2);
+INSERT INTO Play VALUES (2, '2019-12-20', '19:00:00', 2);
+
+--PLAY WITH TITLE_ID #3 INSERTION
+
+INSERT INTO Play VALUES (3, '2005-01-25', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2005-02-15', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2005-02-23', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2005-03-15', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2005-03-28', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2005-04-08', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2005-04-20', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2005-05-05', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2005-06-20', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2005-07-20', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2005-08-20', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2005-09-20', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2005-10-20', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2005-11-20', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2005-12-05', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2005-12-20', '19:00:00', 3);
+INSERT INTO Play VALUES (3, '2006-05-20', '19:00:00', 3);
+
+--PLAY WITH TITLE_ID #4 INSERTION
+
+INSERT INTO Play VALUES (4, '2007-01-15', '19:00:00', 4);
+INSERT INTO Play VALUES (4, '2007-02-21', '19:00:00', 4);
+INSERT INTO Play VALUES (4, '2007-02-23', '19:00:00', 4);
+INSERT INTO Play VALUES (4, '2007-03-26', '19:00:00', 4);
+INSERT INTO Play VALUES (4, '2007-03-27', '19:00:00', 4);
+INSERT INTO Play VALUES (4, '2007-04-03', '19:00:00', 4);
+INSERT INTO Play VALUES (4, '2007-04-24', '19:00:00', 4);
+INSERT INTO Play VALUES (4, '2007-05-05', '19:00:00', 4);
+INSERT INTO Play VALUES (4, '2007-06-20', '19:00:00', 4);
+INSERT INTO Play VALUES (4, '2007-07-27', '19:00:00', 4);
+
+--PLAY WITH TITLE_ID #5 INSERTION
+
+INSERT INTO Play VALUES (5, '2008-01-20', '19:00:00', 1);
+INSERT INTO Play VALUES (5, '2008-02-25', '19:00:00', 1);
+INSERT INTO Play VALUES (5, '2008-02-21', '19:00:00', 1);
+INSERT INTO Play VALUES (5, '2008-03-20', '19:00:00', 1);
+INSERT INTO Play VALUES (5, '2008-03-28', '19:00:00', 1);
+INSERT INTO Play VALUES (5, '2008-04-15', '19:00:00', 1);
+INSERT INTO Play VALUES (5, '2008-04-23', '19:00:00', 1);
+INSERT INTO Play VALUES (5, '2008-05-08', '19:00:00', 1);
+INSERT INTO Play VALUES (5, '2008-06-23', '19:00:00', 1);
+INSERT INTO Play VALUES (5, '2008-07-26', '19:00:00', 1);
+
+--DECORATION INSERTION
+
+INSERT INTO Decoration VALUES (1000, 'Glass, Paper', 'Green', 1);
+INSERT INTO Decoration VALUES (999, 'Liquid', 'Orange', 1);
+INSERT INTO Decoration VALUES (200, 'Desks', 'Green', 1);
+INSERT INTO Decoration VALUES (980, 'Bags', 'Red', 1);
+INSERT INTO Decoration VALUES (100, 'Millboard', 'Red', 1);
+INSERT INTO Decoration VALUES (50, 'Paper', 'Yellow, Green', 1);
+
+--PLAY NUMBER 2
+
+INSERT INTO Decoration VALUES (500, 'Leather', 'Violet', 2);
+INSERT INTO Decoration VALUES (910, 'Liquid', 'Cyan', 2);
+INSERT INTO Decoration VALUES (240, 'Liquid', 'Yellow, Red', 2);
+INSERT INTO Decoration VALUES (660, 'Pane', 'Violet, Yellow', 2);
+INSERT INTO Decoration VALUES (190, 'Hill', 'Red, Blue', 2);
+INSERT INTO Decoration VALUES (130, 'Leather', 'Yellow, Green', 2);
+
+--COSTUME INSERTION
+
+--COSTUME_MAKER #1
+
+INSERT INTO Costume VALUES (1, 100, 'Cotton', 'S', 1);
+INSERT INTO Costume VALUES (2, 120, 'Cotton', 'XS', 1);
+INSERT INTO Costume VALUES (3, 130, 'Cotton', 'XXS', 1);
+INSERT INTO Costume VALUES (4, 140, 'Cotton', 'XL', 1);
+INSERT INTO Costume VALUES (5, 110, 'Cotton', 'XXL', 1);
+INSERT INTO Costume VALUES (6, 90, 'Cotton', 'L', 1);
+INSERT INTO Costume VALUES (7, 20, 'Paper', 'S', 1);
+
+--COSTUME_MAKER #2
+
+INSERT INTO Costume VALUES (8, 140, 'Plastic, Cotton', 'XS', 2);
+INSERT INTO Costume VALUES (9, 105, 'Cotton', 'XXS', 2);
+INSERT INTO Costume VALUES (10, 130, 'Silk', 'XL', 2);
+INSERT INTO Costume VALUES (11, 140, 'Cotton', 'XXL', 2);
+INSERT INTO Costume VALUES (12, 110, 'Silk', 'L', 2);
+INSERT INTO Costume VALUES (13, 95, 'Cotton', 'L', 2);
+INSERT INTO Costume VALUES (14, 20, 'Silk', 'M', 2);
+INSERT INTO Costume VALUES (15, 25, 'Paper', 'M', 2);
+INSERT INTO Costume VALUES (16, 100, 'Cotton', 'M', 2);
+
+--COSTUME_MAKER #3
+
+INSERT INTO Costume VALUES (17, 170, 'Rubber', 'XL', 3);
+INSERT INTO Costume VALUES (18, 205, 'Cuprum', 'XXS', 3);
+INSERT INTO Costume VALUES (19, 110, 'Silk', 'XL', 3);
+INSERT INTO Costume VALUES (20, 240, 'Leather', 'M', 3);
+INSERT INTO Costume VALUES (21, 110, 'Silk', 'L', 3);
+INSERT INTO Costume VALUES (22, 15, 'Millboard', 'M', 3);
+INSERT INTO Costume VALUES (23, 40, 'Silk', 'M', 3);
+INSERT INTO Costume VALUES (24, 35, 'Paper', 'M', 3);
+INSERT INTO Costume VALUES (25, 60, 'Plastic, Cotton', 'M', 3);
+
+--ROLE INSERTION
+--ROLE Play #1
+
+INSERT INTO Role VALUES (1, 'Don Jose', 'HERO', 'MALE', 1);
+INSERT INTO Role VALUES (2, 'Escamilho', 'TRAVESTY', 'FEMALE', 1);
+INSERT INTO Role VALUES (3, 'Cyniga', 'HERO', 'MALE', 1);
+INSERT INTO Role VALUES (4, 'Frasquito', 'SOUBRETTE', 'FEMALE', 1);
+INSERT INTO Role VALUES (5, 'Karmen', 'MORALIST', 'FEMALE', 1);
+INSERT INTO Role VALUES (6, 'Dankairo', 'SERVANT', 'MALE', 1);
+INSERT INTO Role VALUES (7, 'Mercedes', 'LOVER HERO', 'FEMALE', 1);
+INSERT INTO Role VALUES (8, 'Remendado', 'HERO', 'MALE', 1);
+
+--ROLE Play #2
+
+INSERT INTO Role VALUES (9, 'Tesey', 'KING', 'MALE', 2);
+INSERT INTO Role VALUES (10, 'Persey', 'TYRANT', 'MALE', 2);
+INSERT INTO Role VALUES (11, 'Egay', 'TYRANT', 'MALE', 2);
+INSERT INTO Role VALUES (12, 'Migva', 'MORALIST', 'FEMALE', 2);
+INSERT INTO Role VALUES (13, 'Elena', 'FEMALE', 'FEMALE', 2);
+INSERT INTO Role VALUES (14, 'Oberon', 'SOUBRETTE', 'MALE', 2);
+INSERT INTO Role VALUES (15, 'Ippolita', 'PRINCESS', 'FEMALE', 2);
+INSERT INTO Role VALUES (16, 'Remendado', 'LOVER HERO', 'MALE', 2);
+
+--ROLE Play #3 
+
+INSERT INTO Role VALUES (17, 'Skvoznik-Dmujhanovskiy', 'KING', 'MALE', 3);
+INSERT INTO Role VALUES (18, 'Luka Lukich', 'TRAVESTY', 'MALE', 3);
+INSERT INTO Role VALUES (19, 'Dobchinskiy', 'TYRANT', 'MALE', 3);
+INSERT INTO Role VALUES (20, 'Bobchinskiy', 'MORALIST', 'MALE', 3);
+INSERT INTO Role VALUES (21, 'Hlestakov', 'FEMALE', 'MALE', 3);
+INSERT INTO Role VALUES (22, 'Osip', '', 'MALE', 3);
+INSERT INTO Role VALUES (23, 'Hibner', 'PRINCESS', 'MALE', 3);
+INSERT INTO Role VALUES (24, 'Derzhimorda', 'LOVER HERO', 'MALE', 3);
+
+--ROLE Play #4 
+
+INSERT INTO Role VALUES (25, 'Eugene Onegin', 'HERO', 'MALE', 4);
+INSERT INTO Role VALUES (26, 'Tatiana Larina', 'LOVER HERO', 'FEMALE', 4);
+INSERT INTO Role VALUES (27, 'Olga Larina', '', 'FEMALE', 4);
+INSERT INTO Role VALUES (28, 'Igor Ozerov', 'MORALIST', 'MALE', 4);
+INSERT INTO Role VALUES (29, 'Gremin', 'FEMALE', 'MALE', 4);
+INSERT INTO Role VALUES (30, 'Lenskiy', 'MORALIST', 'MALE', 4);
+INSERT INTO Role VALUES (31, 'Skotinin', 'TYRANT', 'MALE', 4);
+
+--Play #5 
+
+INSERT INTO Role VALUES (32, 'Laura', 'HERO', 'MALE', 5);
+INSERT INTO Role VALUES (33, 'Chairman', 'LOVER HERO', 'FEMALE', 5);
+INSERT INTO Role VALUES (34, 'Donna Anna', '', 'FEMALE', 5);
+INSERT INTO Role VALUES (35, 'Mary', 'MORALIST', 'MALE', 5);
+INSERT INTO Role VALUES (36, 'Salieri', 'VILLAIN', 'MALE', 5);
+INSERT INTO Role VALUES (37, 'Mozart', 'HERO', 'MALE', 5);
+INSERT INTO Role VALUES (38, 'Ivan', 'TYRANT', 'MALE', 5);
+
+--INSERTION INTO Role_Costume
+
+INSERT INTO Role_Costume VALUES (1, 1);
+INSERT INTO Role_Costume VALUES (1, 2);
+INSERT INTO Role_Costume VALUES (1, 3);
+INSERT INTO Role_Costume VALUES (2, 1);
+INSERT INTO Role_Costume VALUES (3, 7);
+INSERT INTO Role_Costume VALUES (3, 6);
+INSERT INTO Role_Costume VALUES (3, 5);
+INSERT INTO Role_Costume VALUES (4, 2);
+INSERT INTO Role_Costume VALUES (4, 1);
+
+--ACTOR_IN_PLAY Play #1
+
+INSERT INTO Actor_In_Play VALUES (1, 1, '2001-12-20', NULL, 'Foreground Role', 1, 1);
+INSERT INTO Actor_In_Play VALUES (2, 1, '2001-12-21', NULL, 'Foreground Role', 1, 2);
+INSERT INTO Actor_In_Play VALUES (3, 1, '2001-12-21', NULL, 'Foreground Role', 1, 3);
+INSERT INTO Actor_In_Play VALUES (4, 1, '2001-12-23', NULL, 'Foreground Role', 1, 4);
+INSERT INTO Actor_In_Play VALUES (5, 1, '2001-12-23', NULL, 'Background Role', 1, 5);
+INSERT INTO Actor_In_Play VALUES (6, 1, '2001-12-23', NULL, 'Background Role', 1, 6);
+INSERT INTO Actor_In_Play VALUES (7, 1, '2001-12-23', NULL, 'Background Role', 1, 7);
+INSERT INTO Actor_In_Play VALUES (8, 1, '2001-12-23', NULL, 'Background Role', 1, 8);
+INSERT INTO Actor_In_Play VALUES (9, 1, '2001-12-23', NULL, 'Background Role', 2, 2);
+INSERT INTO Actor_In_Play VALUES (10, 1, '2005-12-23', NULL, 'Background Role', 1, 1);
+INSERT INTO Actor_In_Play VALUES (11, 1, '2005-12-23', NULL, 'Background Role', 1, 2);
+
+--ACTOR_IN_PLAY Play #2
+
+INSERT INTO Actor_In_Play VALUES (9,  2, '2002-12-20', NULL, 'Foreground Role', 1, 9);
+INSERT INTO Actor_In_Play VALUES (10, 2, '2002-12-21', NULL, 'Foreground Role', 1, 10);
+INSERT INTO Actor_In_Play VALUES (11, 2, '2002-12-21', NULL, 'Foreground Role', 1, 11);
+INSERT INTO Actor_In_Play VALUES (12, 2, '2002-12-23', NULL, 'Foreground Role', 1, 12);
+INSERT INTO Actor_In_Play VALUES (13, 2, '2002-12-23', '2004-12-09', 'Background Role', 1, 13);
+INSERT INTO Actor_In_Play VALUES (14, 2, '2002-12-23', '2005-08-20', 'Foreground Role', 1, 14);
+INSERT INTO Actor_In_Play VALUES (15, 2, '2002-12-23', '2003-10-23', 'Background Role', 2, 14);
+INSERT INTO Actor_In_Play VALUES (16, 2, '2002-12-23', NULL, 'Foreground Role', 2, 12);
+INSERT INTO Actor_In_Play VALUES (2,  2, '2001-12-21', NULL, 'Foreground Role', 1, 2);
+
+--ACTOR_IN_PLAY Play #3
+
+INSERT INTO Actor_In_Play VALUES (9,  3, '2002-12-20', NULL, 'Foreground Role', 1, 9);
+INSERT INTO Actor_In_Play VALUES (10, 3, '2002-12-21', NULL, 'Foreground Role', 1, 10);
+INSERT INTO Actor_In_Play VALUES (11, 3, '2002-12-21', NULL, 'Foreground Role', 1, 11);
+INSERT INTO Actor_In_Play VALUES (12, 3, '2002-12-23', NULL, 'Foreground Role', 1, 12);
+INSERT INTO Actor_In_Play VALUES (13, 3, '2002-12-23', '2004-12-09', 'Background Role', 1, 13);
+INSERT INTO Actor_In_Play VALUES (14, 3, '2002-12-23', '2005-08-20', 'Foreground Role', 1, 14);
+INSERT INTO Actor_In_Play VALUES (15, 3, '2002-12-23', '2003-10-23', 'Background Role', 2, 14);
+INSERT INTO Actor_In_Play VALUES (16, 3, '2002-12-23', NULL, 'Foreground Role', 2, 12);
+INSERT INTO Actor_In_Play VALUES (2,  3, '2001-12-21', NULL, 'Foreground Role', 1, 2);
+
+--DECORATION_DECORATION_MAKER INSERTION
+
+INSERT INTO Decoration_Decoration_Maker VALUES (1, 1);
+INSERT INTO Decoration_Decoration_Maker VALUES (2, 1);
+INSERT INTO Decoration_Decoration_Maker VALUES (3, 1);
+INSERT INTO Decoration_Decoration_Maker VALUES (4, 1);
+INSERT INTO Decoration_Decoration_Maker VALUES (5, 1);
+INSERT INTO Decoration_Decoration_Maker VALUES (6, 1);
+
+
+
+
