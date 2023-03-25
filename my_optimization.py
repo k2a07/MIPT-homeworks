@@ -1,19 +1,20 @@
 #Imports
 import numpy as np
 import matplotlib.pyplot as plt
-from scipy.stats import ortho_group
+#from scipy.stats import ortho_group
 from datetime import datetime as dt
+from numpy.linalg import norm
 import time
-from sklearn.metrics import mean_squared_error, accuracy_score
+#from sklearn.metrics import mean_squared_error, accuracy_score
 
 #Class of Gradient Methods Optimizers
 class GradientOptimizer:
-    def __init__(self, f, grad_f, x_0, gamma, n_iter = 1000, n = 1, args, criterium = '||x_k - x^*||', eps = 1e-6, x_sol, sgd_activate = False, batch_size = 1, svrg_activate = False, sarah_activate = False, csgd_activate = False, grad_f_j = None):
+    def __init__(self, f, grad_f, x_0, gamma_k, args, n_iter = 1000, n = 1, criterium = '||x_k - x^*||', eps = 1e-8, x_true = None, sgd_activate = False, batch_size = 1, svrg_activate = False, sarah_activate = False, csgd_activate = False, grad_f_j = None, is_dependent = False, n_coord = 1):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
         :parameter x_0: starting point
-        :parameter gamma: learning rate
+        :parameter gamma_k: learning rate function depending on the number of current iteration k
         :parameter n_iter: number of iterations
         :parameter n: number of workers (functions to optimize)
         :parameter args: includes parameters of functions
@@ -24,15 +25,16 @@ class GradientOptimizer:
         :parameter batch_size: number of batches (by default equals to 1)
         :parameter svrg_activate: activate svrg
         :parameter sarah_activate: activate sarah
-        :parameter coord_sgd_activate: activate coord_sgd
-        :parameter is_independent: use the independent coordinates in CSGD if True
-        :parameter grad_f_j: the j-th coordinate of a gradient
+        :parameter csgd_activate: activate csgd
+        :parameter is_dependent: use the dependent coordinates in CSGD if True
+        :parameter grad_f_j: the j-th coordinate of a gradient        
+        :parameter n_coord: the number of coordinates left in the CSVG
         '''
-
+        
         self.f = f
         self.grad_f = grad_f
         self.x_0 = x_0
-        self.gamma = gamma
+        self.gamma_k = gamma_k
         self.args = args
         self.n_iter = n_iter
         self.n = n
@@ -42,13 +44,16 @@ class GradientOptimizer:
         self.sgd_activate = sgd_activate
         self.svrg_activate = svrg_activate
         self.sarah_activate = sarah_activate
-        self.csgd_activate = coord_sgd_activate
+        self.csgd_activate = csgd_activate
+        self.grad_f_j = grad_f_j
+        self.is_dependent = is_dependent
+        self.n_coord = n_coord
     
     def gd_step(self, x_k, k):
         '''
         Basic Gradient Descent step
         '''
-        gamma = self.gamma(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
         
         return x_k - gamma * self.grad_f(x_k, self.args)
     
@@ -56,7 +61,7 @@ class GradientOptimizer:
         '''
         Stochastic Gradient Descent step
         '''
-        gamma = self.gamma(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
         
         ksi_k = np.mean([np.random.normal(0, 10, len(x_k)) for _ in range(batch_size)])
         
@@ -66,79 +71,86 @@ class GradientOptimizer:
         '''
         Coordinate Stochastic Gradient Descent step
         '''
-        gamma = self.gamma(k, self.f, self.grad_f, x_k, self.x_true, self.args)
-        
-        grad = [0]*len(x_k)
-        j = np.random.randint(self.args['d'])
-        grad[j] = self.grad_f_j(x_k, j, self.args)
-        
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        grad = np.zeros(x_k.shape[0])
+     
+        if self.is_dependent is False:  
+            for i in range(self.n_coord):
+                j = np.random.randint(self.args['d'])
+                grad[j] = self.grad_f_j(x_k, j, self.args)
+        else:
+            pass
+            '''
+            s = set(range(self.args['d']))
+            for i in range(self.n_coord):
+                j = np.random.choice(list(s))
+                grad[j] = self.grad_f_j(x_k, j, self.args)
+                s.discard(j)
+            '''
+    
         return x_k - gamma * grad         
            
     def descent(self):
         '''
         :this function realizes the descent to the optimum using one of the gradient-based methods:
         '''
-        x_k = self.x_0
-        #w_k = self.x_0
-        g_k = self.grad_f(self.x_0, self.args)
+        x_k = np.copy(self.x_0)
+        g_k = self.grad_f(x_k, self.args)
         
         #phi_k = np.array([self.x_0] * self.n)
         t_start = time.time()
-        #elapsed_time = 0
         
         times_arr = []
         differences_arr = []
         points_arr = []
         
-        for k in range(self.n_iter):
-            x_new = None
-           
+        for k in range(self.n_iter):     
             if self.sgd_activate is True:
-                x_new = GradientOptimizer.sgd_step(self, x_k, k)
+                x_k = GradientOptimizer.sgd_step(self, x_k, k)
             elif self.csgd_activate is True:
-                x_new = GradientOptimizer.csgd_step(self, x_k, k)
-                '''
-            elif self.svrg_activate is True:
-                x_new = GradientOptimizer.svrg_step(self, x_k, k)
-                '''
+                x_k = GradientOptimizer.csgd_step(self, x_k, k)
             else:
-                x_new = GradientDescent.gd_step(self, x_k, k)
-            points_arr.append(x_new)
+                x_k = GradientOptimizer.gd_step(self, x_k, k)
+                
+            points_arr.append(x_k)
             
             t_stop = time.time()
             if self.criterium == '||x_k - x^*||':
-                differences_arr.append(norm(x_new - self.x_true, ord=2))
+                differences_arr.append(norm(x_k - self.x_true, ord = 2))
             elif self.criterium == '|f(x_k) - f(x^*)|':
-                differences_arr.append(self.f(x_new, self.args) - self.f(self.x_true, self.args))
+                differences_arr.append(self.f(x_k, self.args) - self.f(self.x_true, self.args))
             elif self.criterium == '||grad_f(x_k)||':
-                differences_arr.append(norm(self.grad_f(x_new, self.args), ord=2))
+                differences_arr.append(norm(self.grad_f(x_k, self.args), ord = 2))
                 
             t_current = time.time()
             times_arr.append(t_current - t_start)
-                               
+
+            '''                   
             if differences_arr[-1] <= self.eps:
                 break
+            '''
                 
-            return points_arr, differences_arr, times_arr
+        return points_arr, differences_arr, times_arr
 
 #Plot Graphs
-def plot_graphs(x, y, label, title, logscale = False, criteria_type = "||x - x*||"):
+def plot_graphs(x, y, x_label, y_label, title, logscale = False, criteria_type = "||x - x*||"):
+    plt.figure(figsize=(14, 10))
     for i in range(len(y)):
-        plt.plot(x, y[i], label = label[i])
+        plt.plot(x[i], y[i], label = y_label[i])
     if logscale == True:
         plt.yscale('log')
     plt.ylabel(criteria_type)
-    plt.xlabel('n_iter')
+    plt.xlabel(x_label)
     plt.title(title)
     plt.legend()
     plt.show()        
         
 #Matrix Generation                
 def gen_A(d, mu, L):
-    U = ortho_group.rvs(dim = d)
+    #U = ortho_group.rvs(dim = d)
     A = mu * np.eye(d)
     A[0][0] = L
-    A = U.T @ A @ U
+    #A = U.T @ A @ U
 
     return A
 
@@ -149,7 +161,7 @@ def f_quad(x, args):
 def f_quad_grad(x, args):
     return args['A'] @ x - args['b']
 
-def f_quad_grad_f_j(x, j, args):
+def f_quad_grad_j(x, j, args):
     return args['A'][j] @ x - args['b'][j]    
 
 def SAGA(n_iter, lr, R, f_arr, nodes_count, x_0):
@@ -176,7 +188,7 @@ def SAGA(n_iter, lr, R, f_arr, nodes_count, x_0):
 
 def SVRG(n_iter, A, lr, b, x_0):
     pass    
-
+'''
 def criteria_points(A, b, points, x_true = None, criteria_type = "||x - x*||"):
     diff_arr = []
     crit_arr = []
@@ -192,7 +204,8 @@ def criteria_points(A, b, points, x_true = None, criteria_type = "||x - x*||"):
             crit_arr.append((np.linalg.norm(Get_grad(A, b, points[i])))**2)
         
     return crit_arr
-    
+'''
+
 #---------------------------------------------HW 3-----------------------------------------------------
 
 def acc_n_iter_dependency(start, finish, step, optimizer, lambda_=None):
