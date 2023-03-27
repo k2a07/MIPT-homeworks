@@ -88,7 +88,14 @@ class GradientOptimizer:
                 s.discard(j)
             '''
     
-        return x_k - gamma * grad         
+        return x_k - gamma * grad
+    
+    def sega_step():
+        '''
+        SEGA Algorithm step
+        '''
+        
+        pass
            
     def descent(self):
         '''
