@@ -9,7 +9,7 @@ import time
 
 #Class of Gradient Methods Optimizers
 class GradientOptimizer:
-    def __init__(self, f, grad_f, x_0, gamma_k, args, n_iter = 1000, n = 1, criterium = '||x_k - x^*||', eps = 1e-8, x_true = None, sgd_activate = False, batch_size = 1, svrg_activate = False, sarah_activate = False, csgd_activate = False, grad_f_j = None, is_dependent = False, n_coord = 1):
+    def __init__(self, f, grad_f, x_0, gamma_k, args, n_iter = 1000, n = 1, criterium = '||x_k - x^*||', eps = 1e-8, x_true = None, sgd_activate = False, batch_size = 1, svrg_activate = False, sarah_activate = False, csgd_activate = False, grad_f_j = None, is_independent = False, n_coord = 1, sega_activate = False):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
@@ -26,9 +26,10 @@ class GradientOptimizer:
         :parameter svrg_activate: activate svrg
         :parameter sarah_activate: activate sarah
         :parameter csgd_activate: activate csgd
-        :parameter is_dependent: use the dependent coordinates in CSGD if True
+        :parameter is_independent: use the independent coordinates in csgd if True
         :parameter grad_f_j: the j-th coordinate of a gradient        
-        :parameter n_coord: the number of coordinates left in the CSVG
+        :parameter n_coord: the number of coordinates left in the csgd
+        :parameter sega_activate: activate sega
         '''
         
         self.f = f
@@ -46,8 +47,9 @@ class GradientOptimizer:
         self.sarah_activate = sarah_activate
         self.csgd_activate = csgd_activate
         self.grad_f_j = grad_f_j
-        self.is_dependent = is_dependent
+        self.is_independent = is_independent
         self.n_coord = n_coord
+        self.sega_activate = sega_activate
     
     def gd_step(self, x_k, k):
         '''
@@ -65,7 +67,7 @@ class GradientOptimizer:
         
         ksi_k = np.mean([np.random.normal(0, 10, len(x_k)) for _ in range(batch_size)])
         
-        return x_k - x_k - gamma * (self.grad_f(x_k, self.args) + ksi_k)
+        return x_k - gamma * (self.grad_f(x_k, self.args) + ksi_k)
     
     def csgd_step(self, x_k, k):
         '''
@@ -74,28 +76,32 @@ class GradientOptimizer:
         gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
         grad = np.zeros(x_k.shape[0])
      
-        if self.is_dependent is False:  
+        if self.is_independent is False:  
             for i in range(self.n_coord):
                 j = np.random.randint(self.args['d'])
                 grad[j] = self.grad_f_j(x_k, j, self.args)
         else:
-            pass
-            '''
             s = set(range(self.args['d']))
             for i in range(self.n_coord):
                 j = np.random.choice(list(s))
-                grad[j] = self.grad_f_j(x_k, j, self.args)
+                grad[j] = self.grad_f_j(x_k, j, self.args).real
                 s.discard(j)
-            '''
-    
+                
         return x_k - gamma * grad
     
-    def sega_step():
+    def sega_step(self, x_k, h_k, k):
         '''
         SEGA Algorithm step
         '''
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        e_j = np.zeros(x_k.shape[0]) 
+        j = np.random.randint(self.args['d'])
+        e_j[j] = 1
         
-        pass
+        g_k = self.args['d'] * e_j * (grad[j] - h_k[j]) + h_k
+        h_k_new = h_k + e_j * (grad[j] - h_k[j])
+        
+        return x_k - gamma*g_k, h_k_new
            
     def descent(self):
         '''
@@ -108,6 +114,7 @@ class GradientOptimizer:
         t_start = time.time()
         
         times_arr = []
+        
         differences_arr = []
         points_arr = []
         
@@ -116,6 +123,8 @@ class GradientOptimizer:
                 x_k = GradientOptimizer.sgd_step(self, x_k, k)
             elif self.csgd_activate is True:
                 x_k = GradientOptimizer.csgd_step(self, x_k, k)
+            elif self.sega_activate is True:
+                x_k = GradientOptimizer.sega_step(self, x_k, h_k, k)
             else:
                 x_k = GradientOptimizer.gd_step(self, x_k, k)
                 
@@ -140,9 +149,12 @@ class GradientOptimizer:
         return points_arr, differences_arr, times_arr
 
 #Plot Graphs
-def plot_graphs(x, y, x_label, y_label, title, logscale = False, criteria_type = "||x - x*||"):
-    plt.figure(figsize=(14, 10))
-    for i in range(len(y)):
+def plot_graphs(x, y, x_label, y_label, title, logscale = False, specific_slice = False, criteria_type = "||x - x*||"):
+    if specific_slice == False:
+        specific_slice = range(len(y))
+    
+    plt.figure(figsize=(8, 8))
+    for i in specific_slice:
         plt.plot(x[i], y[i], label = y_label[i])
     if logscale == True:
         plt.yscale('log')
