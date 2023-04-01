@@ -79,7 +79,7 @@ class GradientOptimizer:
         if self.is_independent is False:  
             for i in range(self.n_coord):
                 j = np.random.randint(self.args['d'])
-                grad[j] = self.grad_f_j(x_k, j, self.args)
+                grad[j] = self.grad_f_j(x_k, j, self.args).real
         else:
             s = set(range(self.args['d']))
             for i in range(self.n_coord):
