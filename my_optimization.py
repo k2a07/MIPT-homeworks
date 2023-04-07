@@ -84,17 +84,17 @@ class GradientOptimizer:
 
         return grad_list
             
-    def top_k_compressor(self, grad):
-        '''
-        top_k compressor
-        '''
-        assert self.top_k_param is not None
-        grad = np.array(grad)  # Convert grad to a numpy array
-        compressed_grad = np.zeros(len(grad))
-        grad_abs = np.abs(grad)
-        top_indices = np.argsort(grad_abs)[-abs(self.top_k_param):]
-        compressed_grad[top_indices] = grad[top_indices]
-        return compressed_grad
+        def top_k_compressor(self, grad):
+            '''
+            top_k compressor
+            '''
+            assert self.top_k_param is not None
+            grad = np.array(grad)  # Convert grad to a numpy array
+            compressed_grad = np.zeros(len(grad))
+            grad_abs = np.abs(grad)
+            top_indices = np.argsort(grad_abs)[-abs(self.top_k_param):]
+            compressed_grad[top_indices] = grad[top_indices]
+            return compressed_grad
     
     def rand_k_compressor(self, grad):
         '''
