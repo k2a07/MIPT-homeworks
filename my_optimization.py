@@ -9,7 +9,11 @@ import time
 
 #Class of Gradient Methods Optimizers
 class GradientOptimizer:
-    def __init__(self, f, grad_f, x_0, gamma_k, args, n_iter = 1000, n = 1, criterium = '||x_k - x^*||', eps = 1e-8, x_true = None, sgd_activate = False, batch_size = 1, svrg_activate = False, sarah_activate = False, csgd_activate = False, grad_f_j = None, is_independent = False, n_coord = 1, sega_activate = False):
+    def __init__(self, f, grad_f, x_0, gamma_k, args, n_iter = 1000, n = 1, criterium = '||x_k - x^*||', 
+                 eps = 1e-8, x_true = None, sgd_activate = False, batch_size = 1, svrg_activate = False, 
+                 sarah_activate = False, csgd_activate = False, grad_f_j = None, is_independent = False, 
+                 n_coord = 1, sega_activate = False, n_workers = 1, top_k_activate = False, 
+                 rand_k_activate = False, ef_activate = False, top_k_param = None, rand_k_param = None):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
@@ -30,6 +34,10 @@ class GradientOptimizer:
         :parameter grad_f_j: the j-th coordinate of a gradient        
         :parameter n_coord: the number of coordinates left in the csgd
         :parameter sega_activate: activate sega
+        :parameter n_workers: number of workers in distributed optimization
+        :parameter top_k_activate: activate top_k compressor
+        :parameter rand_k_activate: activate rand_k compressor
+        :parameter ef_activate: activate error feedback in compressor
         '''
         
         self.f = f
@@ -50,14 +58,73 @@ class GradientOptimizer:
         self.is_independent = is_independent
         self.n_coord = n_coord
         self.sega_activate = sega_activate
+        self.n_workers = n_workers
+        self.top_k_activate = top_k_activate
+        self.top_k_param = top_k_param
+        self.rand_k_activate = rand_k_activate
+        self.rand_k_param = rand_k_param
+        self.ef_activate = ef_activate
+
+    #---COMPRESSORS------------------------------------------------------------------------------------------
+
+    def grad_list_compressor(self, x_k):
+        '''
+        Realizes compression of a gradient 
+        '''
+        grad_list = self.grad_f(x_k, self.args)
+
+        if self.top_k_activate is True:
+            for i in range(self.n_workers):
+                grad_list[i] = GradientOptimizer.top_k_compressor(self, grad_list[i])
+        elif self.rand_k_activate is True:
+            for i in range(self.n_workers):
+                grad_list[i] = GradientOptimizer.rand_k_compressor(self, grad_list[i])
+        else:
+            pass
+
+        return grad_list
+            
+    def top_k_compressor(self, grad):
+        '''
+        top_k compressor
+        '''
+        assert self.top_k_param is not None
+        grad = np.array(grad)  # Convert grad to a numpy array
+        compressed_grad = np.zeros(len(grad))
+        grad_abs = np.abs(grad)
+        top_indices = np.argsort(grad_abs)[-abs(self.top_k_param):]
+        compressed_grad[top_indices] = grad[top_indices]
+        return compressed_grad
     
+    def rand_k_compressor(self, grad):
+        '''
+        rand_k compressor
+        '''
+        assert self.rand_k_param is not None
+        compressed_grad = np.zeros(len(grad))
+
+        all_indices = np.arange(len(grad))
+        rand_indices = np.random.choice(all_indices, self.rand_k_param, replace=False)
+
+        compressed_grad[rand_indices] = grad[rand_indices]
+        return compressed_grad
+    
+    #---OPTIMIZATION ALGORITHMS' STEPS------------------------------------------------------------------------------------------
+
     def gd_step(self, x_k, k):
         '''
         Basic Gradient Descent step
         '''
+        compressed_grad_list = GradientOptimizer.grad_list_compressor(self, x_k)
+
+        master_grad = np.zeros(len(compressed_grad_list[0]))
+        for i in range(self.n_workers):
+            master_grad += compressed_grad_list[i]
+        master_grad /= (2*self.n_workers) #IDK WHY 2n BUT IT IS IN HW7 TASK 1
+
         gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
         
-        return x_k - gamma * self.grad_f(x_k, self.args)
+        return x_k - gamma * master_grad
     
     def sgd_step(self, x_k, k):
         '''
@@ -88,28 +155,36 @@ class GradientOptimizer:
                 s.discard(j)
                 
         return x_k - gamma * grad
+
     
     def sega_step(self, x_k, h_k, k):
         '''
         SEGA Algorithm step
         '''
         gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
-        e_j = np.zeros(x_k.shape[0]) 
+
+        e_j = np.zeros(len(x_k)) 
         j = np.random.randint(self.args['d'])
         e_j[j] = 1
+
+        grad_j = self.grad_f_j(x_k, j, self.args).real
         
-        g_k = self.args['d'] * e_j * (grad[j] - h_k[j]) + h_k
-        h_k_new = h_k + e_j * (grad[j] - h_k[j])
+        g_k = self.args['d'] * e_j * (grad_j - h_k[j]) + h_k
+        h_k_new = h_k + e_j * (grad_j - h_k[j])
         
         return x_k - gamma*g_k, h_k_new
+    
+    #---DESCENT------------------------------------------------------------------------------------------
            
     def descent(self):
         '''
-        :this function realizes the descent to the optimum using one of the gradient-based methods:
+        This function realizes the descent to the optimum using one of the gradient-based methods
+        Note that it is a master node
         '''
         x_k = np.copy(self.x_0)
-        g_k = self.grad_f(x_k, self.args)
-        
+        #g_k = self.grad_f(x_k, self.args)
+        h_k = self.grad_f(self.x_0, self.args)
+
         #phi_k = np.array([self.x_0] * self.n)
         t_start = time.time()
         
@@ -137,6 +212,8 @@ class GradientOptimizer:
                 differences_arr.append(self.f(x_k, self.args) - self.f(self.x_true, self.args))
             elif self.criterium == '||grad_f(x_k)||':
                 differences_arr.append(norm(self.grad_f(x_k, self.args), ord = 2))
+            else:
+                AssertionError
                 
             t_current = time.time()
             times_arr.append(t_current - t_start)
@@ -149,13 +226,13 @@ class GradientOptimizer:
         return points_arr, differences_arr, times_arr
 
 #Plot Graphs
-def plot_graphs(x, y, x_label, y_label, title, logscale = False, specific_slice = False, criteria_type = "||x - x*||"):
+def plot_graphs(x, y, x_label, lines_labels, title, logscale = False, specific_slice = False, criteria_type = "||x - x*||"):
     if specific_slice == False:
         specific_slice = range(len(y))
     
     plt.figure(figsize=(8, 8))
     for i in specific_slice:
-        plt.plot(x[i], y[i], label = y_label[i])
+        plt.plot(x[i], y[i], label = lines_labels[i])
     if logscale == True:
         plt.yscale('log')
     plt.ylabel(criteria_type)
