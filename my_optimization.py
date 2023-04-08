@@ -13,7 +13,7 @@ class GradientOptimizer:
                  eps = 1e-8, x_true = None, sgd_activate = False, batch_size = 1, svrg_activate = False, 
                  sarah_activate = False, csgd_activate = False, grad_f_j = None, is_independent = False, 
                  n_coord = 1, sega_activate = False, n_workers = 1, top_k_activate = False, 
-                 rand_k_activate = False, ef_activate = False, top_k_param = None, rand_k_param = None):
+                 rand_k_activate = False, ef_activate = False, top_k_param = 0, rand_k_param = 0):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
@@ -73,9 +73,10 @@ class GradientOptimizer:
         '''
         grad_list = self.grad_f(x_k, self.args)
 
-        if self.top_k_activate is True:
+        if self.top_k_activate is True and self.ef_activate is False:
             for i in range(self.n_workers):
                 grad_list[i] = GradientOptimizer.top_k_compressor(self, grad_list[i])
+            
         elif self.rand_k_activate is True:
             for i in range(self.n_workers):
                 grad_list[i] = GradientOptimizer.rand_k_compressor(self, grad_list[i])
@@ -84,23 +85,23 @@ class GradientOptimizer:
 
         return grad_list
             
-        def top_k_compressor(self, grad):
-            '''
-            top_k compressor
-            '''
-            assert self.top_k_param is not None
-            grad = np.array(grad)  # Convert grad to a numpy array
-            compressed_grad = np.zeros(len(grad))
-            grad_abs = np.abs(grad)
-            top_indices = np.argsort(grad_abs)[-abs(self.top_k_param):]
-            compressed_grad[top_indices] = grad[top_indices]
-            return compressed_grad
+    def top_k_compressor(self, grad):
+        '''
+        top_k compressor
+        '''
+        assert self.top_k_param > 0
+
+        compressed_grad = np.zeros(len(grad))
+        top_indices = np.argsort(np.abs(grad))[-self.top_k_param:]
+        compressed_grad[top_indices] = grad[top_indices]
+
+        return compressed_grad
     
     def rand_k_compressor(self, grad):
         '''
         rand_k compressor
         '''
-        assert self.rand_k_param is not None
+        assert self.rand_k_param > 0
         compressed_grad = np.zeros(len(grad))
 
         all_indices = np.arange(len(grad))
@@ -125,6 +126,27 @@ class GradientOptimizer:
         gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
         
         return x_k - gamma * master_grad
+
+    def ef_top_k_gd_step(self, x_k, k, errors_list):
+        '''
+        Error Feedback Top K Gradient Descent step
+        '''
+        grad_list = self.grad_f(x_k, self.args)
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+
+        #EF
+        displaced_grad_list = np.zeros_like(grad_list)
+        for i in range(self.n_workers):
+            displaced_grad_list[i] = GradientOptimizer.top_k_compressor(self, errors_list[i] + gamma * grad_list[i])    
+            errors_list[i] = errors_list[i] + gamma * grad_list[i] - displaced_grad_list[i]
+
+        #Master's calculations
+        master_grad = np.zeros(len(grad_list[0]))
+        for i in range(self.n_workers):
+            master_grad += displaced_grad_list[i]
+        master_grad /= self.n_workers
+
+        return x_k - master_grad, errors_list
     
     def sgd_step(self, x_k, k):
         '''
@@ -184,6 +206,7 @@ class GradientOptimizer:
         x_k = np.copy(self.x_0)
         #g_k = self.grad_f(x_k, self.args)
         h_k = self.grad_f(self.x_0, self.args)
+        errors_list = np.zeros_like(self.grad_f(x_k, self.args)) #for the function ef_top_k_gd_step
 
         #phi_k = np.array([self.x_0] * self.n)
         t_start = time.time()
@@ -200,6 +223,8 @@ class GradientOptimizer:
                 x_k = GradientOptimizer.csgd_step(self, x_k, k)
             elif self.sega_activate is True:
                 x_k = GradientOptimizer.sega_step(self, x_k, h_k, k)
+            elif self.ef_activate is True:
+                x_k, errors_list = GradientOptimizer.ef_top_k_gd_step(self, x_k, k, errors_list)
             else:
                 x_k = GradientOptimizer.gd_step(self, x_k, k)
                 
