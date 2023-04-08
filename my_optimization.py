@@ -13,7 +13,7 @@ class GradientOptimizer:
                  eps = 1e-8, x_true = None, sgd_activate = False, batch_size = 1, svrg_activate = False, 
                  sarah_activate = False, csgd_activate = False, grad_f_j = None, is_independent = False, 
                  n_coord = 1, sega_activate = False, n_workers = 1, top_k_activate = False, 
-                 rand_k_activate = False, ef_activate = False, top_k_param = 0, rand_k_param = 0):
+                 rand_k_activate = False, ef_activate = False, top_k_param = 0, rand_k_param = 0, diana_activate = False):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
@@ -38,6 +38,7 @@ class GradientOptimizer:
         :parameter top_k_activate: activate top_k compressor
         :parameter rand_k_activate: activate rand_k compressor
         :parameter ef_activate: activate error feedback in compressor
+        :parameter diana_activate: activate diana algorithm
         '''
         
         self.f = f
@@ -64,6 +65,7 @@ class GradientOptimizer:
         self.rand_k_activate = rand_k_activate
         self.rand_k_param = rand_k_param
         self.ef_activate = ef_activate
+        self.diana_activate = diana_activate
 
     #---COMPRESSORS------------------------------------------------------------------------------------------
 
@@ -134,7 +136,7 @@ class GradientOptimizer:
         grad_list = self.grad_f(x_k, self.args)
         gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
 
-        #EF
+        #Worker's calculation of EF
         displaced_grad_list = np.zeros_like(grad_list)
         for i in range(self.n_workers):
             displaced_grad_list[i] = GradientOptimizer.top_k_compressor(self, errors_list[i] + gamma * grad_list[i])    
@@ -147,6 +149,41 @@ class GradientOptimizer:
         master_grad /= self.n_workers
 
         return x_k - master_grad, errors_list
+
+    def diana_step(self, x_k, k, h_list):
+        '''
+        DIANA step
+        #each node generates h_i - new sequence
+        #(starting) h_i = grad_i(x_0) and send to server
+        #save delta_i = grad_i(x_k) - h_i
+        #compressed_delta_i = Q(delta_i)
+        #iteration h_i = h_i + alpha(= 1) * compressed_delta_i #both master and worker update
+        #send to server compressed_delta_i
+
+        #server calculates: x_k = x_k - gamma * 1/n * sum of (h_i + compressed_delta_i)
+        '''
+        grad_list = self.grad_f(x_k, self.args)
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        alpha = 1
+
+        #Worker's calculation
+        old_h_list = np.copy(h_list)
+        compressed_delta_list = []
+
+        for i in range(self.n_workers):
+            delta_i = grad_list[i] - h_list[i]
+            compressed_delta_i = GradientOptimizer.top_k_compressor(self, delta_i)
+            compressed_delta_list.append(compressed_delta_i)
+            old_h_ = h_list[i]
+            h_list[i] = h_list[i] + alpha * compressed_delta_i
+        
+        #Master's calculations
+        master_grad = np.zeros(len(grad_list[0]))
+        for i in range(self.n_workers):
+            master_grad += (old_h_list[i] + compressed_delta_list[i])
+        master_grad /= self.n_workers
+
+        return x_k - gamma * master_grad, h_list
     
     def sgd_step(self, x_k, k):
         '''
@@ -205,14 +242,13 @@ class GradientOptimizer:
         '''
         x_k = np.copy(self.x_0)
         #g_k = self.grad_f(x_k, self.args)
-        h_k = self.grad_f(self.x_0, self.args)
-        errors_list = np.zeros_like(self.grad_f(x_k, self.args)) #for the function ef_top_k_gd_step
-
         #phi_k = np.array([self.x_0] * self.n)
+        h_k = self.grad_f(self.x_0, self.args)
+        errors_list = np.zeros_like(self.grad_f(x_k, self.args)) #for the ef_top_k_gd_step method
+        h_list = self.grad_f(self.x_0, self.args)                #for the diana_step 
         t_start = time.time()
         
         times_arr = []
-        
         differences_arr = []
         points_arr = []
         
@@ -225,6 +261,8 @@ class GradientOptimizer:
                 x_k = GradientOptimizer.sega_step(self, x_k, h_k, k)
             elif self.ef_activate is True:
                 x_k, errors_list = GradientOptimizer.ef_top_k_gd_step(self, x_k, k, errors_list)
+            elif self.diana_activate is True:
+                x_k, h_list = GradientOptimizer.diana_step(self, x_k, k, h_list)
             else:
                 x_k = GradientOptimizer.gd_step(self, x_k, k)
                 
@@ -246,8 +284,7 @@ class GradientOptimizer:
             '''                   
             if differences_arr[-1] <= self.eps:
                 break
-            '''
-                
+            '''        
         return points_arr, differences_arr, times_arr
 
 #Plot Graphs
