@@ -139,7 +139,10 @@ class GradientOptimizer:
         #Worker's calculation of EF
         displaced_grad_list = np.zeros_like(grad_list)
         for i in range(self.n_workers):
-            displaced_grad_list[i] = GradientOptimizer.top_k_compressor(self, errors_list[i] + gamma * grad_list[i])    
+            if self.rand_k_activate is True:
+                displaced_grad_list[i] = GradientOptimizer.rand_k_compressor(self, errors_list[i] + gamma * grad_list[i])
+            else:
+                displaced_grad_list[i] = GradientOptimizer.top_k_compressor(self, errors_list[i] + gamma * grad_list[i])    
             errors_list[i] = errors_list[i] + gamma * grad_list[i] - displaced_grad_list[i]
 
         #Master's calculations
@@ -172,7 +175,10 @@ class GradientOptimizer:
 
         for i in range(self.n_workers):
             delta_i = grad_list[i] - h_list[i]
-            compressed_delta_i = GradientOptimizer.top_k_compressor(self, delta_i)
+            if self.rand_k_activate is True:
+                compressed_delta_i = GradientOptimizer.rand_k_compressor(self, delta_i)
+            else:
+                compressed_delta_i = GradientOptimizer.top_k_compressor(self, delta_i)
             compressed_delta_list.append(compressed_delta_i)
             old_h_ = h_list[i]
             h_list[i] = h_list[i] + alpha * compressed_delta_i
