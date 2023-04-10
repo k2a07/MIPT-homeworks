@@ -214,6 +214,7 @@ class GradientOptimizer:
         x_new = x_k - gamma * g_k
 
         grad_f_list_new = self.grad_f(x_new, self.args)
+        g_list_new = np.zeros_like(g_list)
 
         #Worker's calculation
         for i in range(self.n_workers):
@@ -222,11 +223,10 @@ class GradientOptimizer:
             else:
                 c_i = GradientOptimizer.top_k_compressor(self, grad_f_list_new[i] - g_list[i])
             
-            g_list_new = g_c
-        
+            g_list_new[i] = g_list[i] + c_i
+            #Master computes via g_new = g + 1/n * \sum_{i = 1}^n c_i^t, 
+            #which is the same as the previous line in my algorithm
         return x_new, g_list_new
-        
-        pass
     
     def sgd_step(self, x_k, k):
         '''
