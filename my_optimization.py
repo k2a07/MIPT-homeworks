@@ -13,7 +13,7 @@ class GradientOptimizer:
                  y_lim = 1e-8, x_true = None, sgd_activate = False, batch_size = 1, svrg_activate = False, 
                  sarah_activate = False, csgd_activate = False, grad_f_j = None, is_independent = False, 
                  n_coord = 1, sega_activate = False, n_workers = 1, top_k_activate = False, 
-                 rand_k_activate = False, ef_activate = False, top_k_param = 0, rand_k_param = 0, diana_activate = False, acc_k = None):
+                 rand_k_activate = False, ef_activate = False, top_k_param = 0, rand_k_param = 0, diana_activate = False, acc_k = None, upper_limit = 1e10):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
@@ -40,6 +40,7 @@ class GradientOptimizer:
         :parameter ef_activate: activate error feedback in compressor
         :parameter diana_activate: activate diana algorithm
         :parameter acc_k: calculate accuracy on each step depending on the function
+        :parameter upper_limit: upper_limit on criterium
         '''
         
         self.f = f
@@ -68,6 +69,7 @@ class GradientOptimizer:
         self.ef_activate = ef_activate
         self.diana_activate = diana_activate
         self.acc_k = acc_k
+        self.upper_limit = upper_limit
 
     #---COMPRESSORS------------------------------------------------------------------------------------------
 
@@ -300,6 +302,10 @@ class GradientOptimizer:
                    
             if differences_arr[-1] <= self.y_lim:
                 break
+
+            if differences_arr[-1] >= self.upper_limit:
+                print("The upper limit was broken!")
+                break
             
         return points_arr, differences_arr, times_arr, acc_arr
 
@@ -414,7 +420,7 @@ def logloss_grad_mushrooms(w, args):
 
     for i in range(n_samples):
         grad += - args['y_train'][i] * args['X_train'][i] * np.exp(-w.dot(args['X_train'][i]) * args["y_train_list"][i]) / (1 + np.exp(- w.dot(args['X_train'][i]) * args['X_train'][i]))
-    grad / n_samples
+    grad /= n_samples
             
     return grad
 
