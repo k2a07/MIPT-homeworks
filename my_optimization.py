@@ -1,16 +1,16 @@
 #Imports
 import numpy as np
 import matplotlib.pyplot as plt
-#from scipy.stats import ortho_group
+from scipy.stats import ortho_group
 from datetime import datetime as dt
 from numpy.linalg import norm
 import time
-#from sklearn.metrics import mean_squared_error, accuracy_score
+from sklearn.metrics import mean_squared_error, accuracy_score
 
 #Class of Gradient Methods Optimizers
 class GradientOptimizer:
     def __init__(self, f, grad_f, x_0, gamma_k, args, n_iter = 1000, n = 1, criterium = '||x_k - x^*||', 
-                 eps = 1e-8, x_true = None, sgd_activate = False, batch_size = 1, svrg_activate = False, 
+                 y_lim = 1e-8, x_true = None, sgd_activate = False, batch_size = 1, svrg_activate = False, 
                  sarah_activate = False, csgd_activate = False, grad_f_j = None, is_independent = False, 
                  n_coord = 1, sega_activate = False, n_workers = 1, top_k_activate = False, 
                  rand_k_activate = False, ef_activate = False, top_k_param = 0, rand_k_param = 0, diana_activate = False):
@@ -23,7 +23,7 @@ class GradientOptimizer:
         :parameter n: number of workers (functions to optimize)
         :parameter args: includes parameters of functions
         :parameter criterium: criterium of convergence, options: '||x_k - x^*||', '|f(x_k) - f(x^*)|', '||grad_f(x_k)||'
-        :parameter eps: target difference from x_k and x^*
+        :parameter y_lim: target difference from x_k and x^*
         :parameter x_true: trueoptimum
         :parameter sgd_activate: activate sgd
         :parameter batch_size: number of batches (by default equals to 1)
@@ -48,7 +48,7 @@ class GradientOptimizer:
         self.args = args
         self.n_iter = n_iter
         self.n = n
-        self.eps = eps
+        self.y_lim = y_lim
         self.x_true = x_true
         self.criterium = criterium
         self.sgd_activate = sgd_activate
@@ -75,7 +75,7 @@ class GradientOptimizer:
         '''
         grad_list = self.grad_f(x_k, self.args)
 
-        if self.top_k_activate is True and self.ef_activate is False:
+        if self.top_k_activate is True:
             for i in range(self.n_workers):
                 grad_list[i] = GradientOptimizer.top_k_compressor(self, grad_list[i])
             
@@ -112,7 +112,7 @@ class GradientOptimizer:
         compressed_grad[rand_indices] = grad[rand_indices]
         return compressed_grad
     
-    #---OPTIMIZATION ALGORITHMS' STEPS------------------------------------------------------------------------------------------
+    #---OPTIMIZATION ALGORITHMS' STy_lim------------------------------------------------------------------------------------------
 
     def gd_step(self, x_k, k):
         '''
@@ -129,9 +129,9 @@ class GradientOptimizer:
         
         return x_k - gamma * master_grad
 
-    def ef_top_k_gd_step(self, x_k, k, errors_list):
+    def ef_gd_step(self, x_k, k, errors_list):
         '''
-        Error Feedback Top K Gradient Descent step
+        Error Feedback Gradient Descent step
         '''
         grad_list = self.grad_f(x_k, self.args)
         gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
@@ -191,6 +191,12 @@ class GradientOptimizer:
 
         return x_k - gamma * master_grad, h_list
     
+    def ef21(self, x_k, k):
+        '''
+        The Error Feedback 21 approach
+        '''
+        pass
+    
     def sgd_step(self, x_k, k):
         '''
         Stochastic Gradient Descent step
@@ -244,7 +250,6 @@ class GradientOptimizer:
     def descent(self):
         '''
         This function realizes the descent to the optimum using one of the gradient-based methods
-        Note that it is a master node
         '''
         x_k = np.copy(self.x_0)
         #g_k = self.grad_f(x_k, self.args)
@@ -286,28 +291,32 @@ class GradientOptimizer:
                 
             t_current = time.time()
             times_arr.append(t_current - t_start)
-
-            '''                   
-            if differences_arr[-1] <= self.eps:
+                   
+            if differences_arr[-1] <= self.y_lim:
                 break
-            '''        
+            
         return points_arr, differences_arr, times_arr
 
 #Plot Graphs
-def plot_graphs(x, y, x_label, lines_labels, title, logscale = False, specific_slice = False, criteria_type = "||x - x*||"):
+def plot_graphs(x, y, x_label, lines_labels, title, logscale = False, specific_slice = False, 
+                criteria_type = "||x - x*||", idx_marker_arr = []):
     if specific_slice == False:
         specific_slice = range(len(y))
     
     plt.figure(figsize=(8, 8))
     for i in specific_slice:
-        plt.plot(x[i], y[i], label = lines_labels[i])
+        if i in idx_marker_arr:
+            plt.plot(x[i], y[i], label = lines_labels[i], marker = '+')
+        else:
+            plt.plot(x[i], y[i], label = lines_labels[i])
     if logscale == True:
         plt.yscale('log')
     plt.ylabel(criteria_type)
     plt.xlabel(x_label)
     plt.title(title)
     plt.legend()
-    plt.show()        
+    plt.show()    
+    
         
 #Matrix Generation                
 def gen_A(d, mu, L):
@@ -371,27 +380,6 @@ def criteria_points(A, b, points, x_true = None, criteria_type = "||x - x*||"):
 '''
 
 #---------------------------------------------HW 3-----------------------------------------------------
-
-def acc_n_iter_dependency(start, finish, step, optimizer, lambda_=None):
-    acc_arr, n_arr = [], []
-    for n_iter in range(start, finish, step):
-        if GD_type == "basic":
-            w_true = Grad_Descent_Logloss(n_iter, X_train, 1 / L, y_train, np.ones(d), np.shape(X_train)[0], optimizer = optimizer)[-1]
-        elif GD_type == "l1_ball":
-            w_true = Grad_Descent_l1_ball(n_iter, X_train, 1 / L, y_train, np.ones(d), np.shape(X_train)[0], lambda_)[-1]
-
-        y_pred = X_test @ w_true
-        for i in range(len(y_pred)):
-            y_pred[i] = round(y_pred[i])
-        acc_arr.append(accuracy_score(y_test, y_pred))
-        n_arr.append(n_iter)
-
-    plt.plot(n_arr, acc_arr, label="accuracy")
-    plt.xlabel('n_iter')
-    plt.ylabel('accuracy')
-    plt.title('Dependence of accuracy from n_iter')
-    plt.legend()
-    plt.show()
 
 def Logloss(w, X, y, n):
     ans = 0
