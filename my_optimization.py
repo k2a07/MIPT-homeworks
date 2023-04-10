@@ -13,7 +13,7 @@ class GradientOptimizer:
                  y_lim = 1e-8, x_true = None, sgd_activate = False, batch_size = 1, svrg_activate = False, 
                  sarah_activate = False, csgd_activate = False, grad_f_j = None, is_independent = False, 
                  n_coord = 1, sega_activate = False, n_workers = 1, top_k_activate = False, 
-                 rand_k_activate = False, ef_activate = False, top_k_param = 0, rand_k_param = 0, diana_activate = False):
+                 rand_k_activate = False, ef_activate = False, top_k_param = 0, rand_k_param = 0, diana_activate = False, acc_k = None):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
@@ -39,6 +39,7 @@ class GradientOptimizer:
         :parameter rand_k_activate: activate rand_k compressor
         :parameter ef_activate: activate error feedback in compressor
         :parameter diana_activate: activate diana algorithm
+        :parameter acc_k: calculate accuracy on each step depending on the function
         '''
         
         self.f = f
@@ -66,6 +67,7 @@ class GradientOptimizer:
         self.rand_k_param = rand_k_param
         self.ef_activate = ef_activate
         self.diana_activate = diana_activate
+        self.acc_k = acc_k
 
     #---COMPRESSORS------------------------------------------------------------------------------------------
 
@@ -262,8 +264,9 @@ class GradientOptimizer:
         times_arr = []
         differences_arr = []
         points_arr = []
+        acc_arr = []
         
-        for k in range(self.n_iter):     
+        for k in range(1, self.n_iter + 1):     
             if self.sgd_activate is True:
                 x_k = GradientOptimizer.sgd_step(self, x_k, k)
             elif self.csgd_activate is True:
@@ -278,7 +281,10 @@ class GradientOptimizer:
                 x_k = GradientOptimizer.gd_step(self, x_k, k)
                 
             points_arr.append(x_k)
-            
+
+            if self.acc_k is not None:
+                acc_arr.append(self.acc_k(k, self.f, self.grad_f, x_k, self.x_true, self.args))
+
             t_stop = time.time()
             if self.criterium == '||x_k - x^*||':
                 differences_arr.append(norm(x_k - self.x_true, ord = 2))
@@ -295,7 +301,7 @@ class GradientOptimizer:
             if differences_arr[-1] <= self.y_lim:
                 break
             
-        return points_arr, differences_arr, times_arr
+        return points_arr, differences_arr, times_arr, acc_arr
 
 #Plot Graphs
 def plot_graphs(x, y, x_label, lines_labels, title, logscale = False, specific_slice = False, 
@@ -380,18 +386,37 @@ def criteria_points(A, b, points, x_true = None, criteria_type = "||x - x*||"):
 '''
 
 #---------------------------------------------HW 3-----------------------------------------------------
-
-def Logloss(w, X, y, n):
+#[NEW]
+def d_logloss_mushrooms(w, args):
     ans = 0
-    for i in range(n):
-        ans += np.log(1 + np.exp(-(w @ X[i]) * y[i]))
-    return ans / n
+    for i in range(len(args['X_train'])):
+        ans += np.log(1 + np.exp(-(w @ args["X_train"][i]) * args["y_train"][i]))
+    return ans / len(args["X_train"])
 
-def Get_grad_Logloss (w, X, y, n):
-    ans = np.zeros(w.size)
-    for i in range(n):
-        ans += - y[i] * X[i] * np.exp(-w.dot(X[i]) * y[i]) / (1 + np.exp(- w.dot(X[i]) * y[i]))
-    return ans / n
+def d_logloss_grad_mushrooms(w, args):
+    grad_list = []
+    for j in range(args['n_workers']):
+        n_samples = len(args['X_train_list'][j]) #(650)
+        
+        grad_j = np.zeros(w.size) #(112, )
+
+        for i in range(n_samples):
+            grad_j += - args['y_train_list'][j][i] * args['X_train_list'][j][i] * np.exp(-w.dot(args['X_train_list'][j][i]) * args["y_train_list"][j][i]) / (1 + np.exp(- w.dot(args['X_train_list'][j][i]) * args['X_train_list'][j][i]))
+        grad_j / n_samples
+        grad_list.append(grad_j)
+        
+    return grad_list
+
+def logloss_grad_mushrooms(w, args):
+    n_samples = len(args['X_train']) 
+    
+    grad = np.zeros(w.size)
+
+    for i in range(n_samples):
+        grad += - args['y_train'][i] * args['X_train'][i] * np.exp(-w.dot(args['X_train'][i]) * args["y_train_list"][i]) / (1 + np.exp(- w.dot(args['X_train'][i]) * args['X_train'][i]))
+    grad / n_samples
+            
+    return grad
 
 def Grad_Descent_LogReg(n_iter, X, lr, y, w_0, n):
     points = []
@@ -425,7 +450,6 @@ def to_diff(t1, t2):
     delta = t2 - t1
     diff_in_seconds = delta.total_seconds()
     return diff_in_seconds
-
 
 def frank_wolfe(d, n_iter, X):
     x = np.array([1 / d for _ in range(d)])
