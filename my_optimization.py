@@ -6,6 +6,7 @@ from datetime import datetime as dt
 from numpy.linalg import norm
 import time
 from sklearn.metrics import mean_squared_error, accuracy_score
+from tqdm import tqdm
 
 #Class of Gradient Methods Optimizers
 class GradientOptimizer:
@@ -13,7 +14,8 @@ class GradientOptimizer:
                  y_lim = 1e-8, x_true = None, sgd_activate = False, batch_size = 1, svrg_activate = False, 
                  sarah_activate = False, csgd_activate = False, grad_f_j = None, is_independent = False, 
                  n_coord = 1, sega_activate = False, n_workers = 1, top_k_activate = False, 
-                 rand_k_activate = False, ef_activate = False, top_k_param = 0, rand_k_param = 0, diana_activate = False, acc_k = None, upper_limit = 1e10):
+                 rand_k_activate = False, ef_activate = False, top_k_param = 0, rand_k_param = 0, 
+                 diana_activate = False, acc_k = None, upper_limit = 1e10, ef21_activate = False):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
@@ -41,6 +43,7 @@ class GradientOptimizer:
         :parameter diana_activate: activate diana algorithm
         :parameter acc_k: calculate accuracy on each step depending on the function
         :parameter upper_limit: upper_limit on criterium
+        :parameter ef21_activate: activate ef21
         '''
         
         self.f = f
@@ -70,6 +73,7 @@ class GradientOptimizer:
         self.diana_activate = diana_activate
         self.acc_k = acc_k
         self.upper_limit = upper_limit
+        self.ef21_activate = ef21_activate
 
     #---COMPRESSORS------------------------------------------------------------------------------------------
 
@@ -184,7 +188,7 @@ class GradientOptimizer:
             else:
                 compressed_delta_i = GradientOptimizer.top_k_compressor(self, delta_i)
             compressed_delta_list.append(compressed_delta_i)
-            old_h_ = h_list[i]
+            #old_h_ = h_list[i]
             h_list[i] = h_list[i] + alpha * compressed_delta_i
         
         #Master's calculations
@@ -195,10 +199,33 @@ class GradientOptimizer:
 
         return x_k - gamma * master_grad, h_list
     
-    def ef21(self, x_k, k):
+    def ef21_step(self, x_k, k, g_list):
         '''
         The Error Feedback 21 approach
         '''
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+
+        #Master's calculations
+        g_k = np.zeros_like(g_list[0])
+        for i in range(self.n_workers):
+            g_k += g_list[i]
+        g_k /= len(g_list[0])
+
+        x_new = x_k - gamma * g_k
+
+        grad_f_list_new = self.grad_f(x_new, self.args)
+
+        #Worker's calculation
+        for i in range(self.n_workers):
+            if self.rand_k_activate is True:
+                c_i = GradientOptimizer.rand_k_compressor(self, grad_f_list_new[i] - g_list[i])
+            else:
+                c_i = GradientOptimizer.top_k_compressor(self, grad_f_list_new[i] - g_list[i])
+            
+            g_list_new = g_c
+        
+        return x_new, g_list_new
+        
         pass
     
     def sgd_step(self, x_k, k):
@@ -256,11 +283,18 @@ class GradientOptimizer:
         This function realizes the descent to the optimum using one of the gradient-based methods
         '''
         x_k = np.copy(self.x_0)
-        #g_k = self.grad_f(x_k, self.args)
-        #phi_k = np.array([self.x_0] * self.n)
-        h_k = self.grad_f(self.x_0, self.args)
-        errors_list = np.zeros_like(self.grad_f(x_k, self.args)) #for the ef_top_k_gd_step method
-        h_list = self.grad_f(self.x_0, self.args)                #for the diana_step 
+        grad_list = self.grad_f(self.x_0, self.args)
+        h_k = grad_list
+        errors_list = np.zeros_like(self.grad_f(x_k, self.args)) #for the ef_gd_step method
+        h_list = grad_list                                        #for the diana_step 
+        g_list = []
+        for i in range(self.n_workers):
+            if self.rand_k_activate is True:
+                g_i = GradientOptimizer.rand_k_compressor(self, grad_list[i])
+            else:
+                g_i = GradientOptimizer.top_k_compressor(self, grad_list[i])
+            g_list.append(g_i)
+        
         t_start = time.time()
         
         times_arr = []
@@ -268,7 +302,7 @@ class GradientOptimizer:
         points_arr = []
         acc_arr = []
         
-        for k in range(1, self.n_iter + 1):     
+        for k in tqdm(range(self.n_iter)):     
             if self.sgd_activate is True:
                 x_k = GradientOptimizer.sgd_step(self, x_k, k)
             elif self.csgd_activate is True:
@@ -279,6 +313,8 @@ class GradientOptimizer:
                 x_k, errors_list = GradientOptimizer.ef_gd_step(self, x_k, k, errors_list)
             elif self.diana_activate is True:
                 x_k, h_list = GradientOptimizer.diana_step(self, x_k, k, h_list)
+            elif self.ef21_activate is True:
+                x_k, g_list = GradientOptimizer.ef21_step(self, x_k, k, g_list)
             else:
                 x_k = GradientOptimizer.gd_step(self, x_k, k)
                 
