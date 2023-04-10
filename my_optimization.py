@@ -271,7 +271,7 @@ class GradientOptimizer:
             elif self.sega_activate is True:
                 x_k = GradientOptimizer.sega_step(self, x_k, h_k, k)
             elif self.ef_activate is True:
-                x_k, errors_list = GradientOptimizer.ef_top_k_gd_step(self, x_k, k, errors_list)
+                x_k, errors_list = GradientOptimizer.ef_gd_step(self, x_k, k, errors_list)
             elif self.diana_activate is True:
                 x_k, h_list = GradientOptimizer.diana_step(self, x_k, k, h_list)
             else:
