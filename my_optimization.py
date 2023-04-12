@@ -15,7 +15,8 @@ class GradientOptimizer:
                  sarah_activate = False, csgd_activate = False, grad_f_j = None, is_independent = False, 
                  n_coord = 1, sega_activate = False, n_workers = 1, top_k_activate = False, 
                  rand_k_activate = False, ef_activate = False, top_k_param = 0, rand_k_param = 0, 
-                 diana_activate = False, acc_k = None, upper_limit = 1e10, ef21_activate = False):
+                 diana_activate = False, acc_k = None, upper_limit = 1e10, ef21_activate = False, marina_activate = False,
+                 p_marina = 0.5):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
@@ -44,6 +45,8 @@ class GradientOptimizer:
         :parameter acc_k: calculate accuracy on each step depending on the function
         :parameter upper_limit: upper_limit on criterium
         :parameter ef21_activate: activate ef21
+        :parameter marina_activate: activate marina
+        :parameter p_marina: probability of transmitting the whole gradient (not compressed one)
         '''
         
         self.f = f
@@ -74,6 +77,8 @@ class GradientOptimizer:
         self.acc_k = acc_k
         self.upper_limit = upper_limit
         self.ef21_activate = ef21_activate
+        self.marina_activate = marina_activate
+        self.p_marina = p_marina
 
     #---COMPRESSORS------------------------------------------------------------------------------------------
 
@@ -120,7 +125,7 @@ class GradientOptimizer:
         compressed_grad[rand_indices] = grad[rand_indices]
         return compressed_grad
     
-    #---OPTIMIZATION ALGORITHMS' STy_lim------------------------------------------------------------------------------------------
+    #---OPTIMIZATION ALGORITHMS------------------------------------------------------------------------------------------
 
     def gd_step(self, x_k, k):
         '''
@@ -160,7 +165,55 @@ class GradientOptimizer:
         master_grad /= self.n_workers
 
         return x_k - master_grad, errors_list
+    
+    def sgd_step(self, x_k, k):
+        '''
+        Stochastic Gradient Descent step
+        '''
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        
+        ksi_k = np.mean([np.random.normal(0, 10, len(x_k)) for _ in range(batch_size)])
+        
+        return x_k - gamma * (self.grad_f(x_k, self.args) + ksi_k)
+    
+    def csgd_step(self, x_k, k):
+        '''
+        Coordinate Stochastic Gradient Descent step
+        '''
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        grad = np.zeros(x_k.shape[0])
+     
+        if self.is_independent is False:  
+            for i in range(self.n_coord):
+                j = np.random.randint(self.args['d'])
+                grad[j] = self.grad_f_j(x_k, j, self.args).real
+        else:
+            s = set(range(self.args['d']))
+            for i in range(self.n_coord):
+                j = np.random.choice(list(s))
+                grad[j] = self.grad_f_j(x_k, j, self.args).real
+                s.discard(j)
+                
+        return x_k - gamma * grad
 
+    
+    def sega_step(self, x_k, h_k, k):
+        '''
+        SEGA Algorithm step
+        '''
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+
+        e_j = np.zeros(len(x_k)) 
+        j = np.random.randint(self.args['d'])
+        e_j[j] = 1
+
+        grad_j = self.grad_f_j(x_k, j, self.args).real
+        
+        g_k = self.args['d'] * e_j * (grad_j - h_k[j]) + h_k
+        h_k_new = h_k + e_j * (grad_j - h_k[j])
+        
+        return x_k - gamma*g_k, h_k_new
+    
     def diana_step(self, x_k, k, h_list):
         '''
         DIANA step
@@ -228,53 +281,30 @@ class GradientOptimizer:
             #which is the same as the previous line in my algorithm
         return x_new, g_list_new
     
-    def sgd_step(self, x_k, k):
-        '''
-        Stochastic Gradient Descent step
-        '''
-        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
-        
-        ksi_k = np.mean([np.random.normal(0, 10, len(x_k)) for _ in range(batch_size)])
-        
-        return x_k - gamma * (self.grad_f(x_k, self.args) + ksi_k)
-    
-    def csgd_step(self, x_k, k):
-        '''
-        Coordinate Stochastic Gradient Descent step
-        '''
-        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
-        grad = np.zeros(x_k.shape[0])
-     
-        if self.is_independent is False:  
-            for i in range(self.n_coord):
-                j = np.random.randint(self.args['d'])
-                grad[j] = self.grad_f_j(x_k, j, self.args).real
-        else:
-            s = set(range(self.args['d']))
-            for i in range(self.n_coord):
-                j = np.random.choice(list(s))
-                grad[j] = self.grad_f_j(x_k, j, self.args).real
-                s.discard(j)
-                
-        return x_k - gamma * grad
-
-    
-    def sega_step(self, x_k, h_k, k):
-        '''
-        SEGA Algorithm step
-        '''
+    def marina(self, x_k, k, p_marina, g_k):
         gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
 
-        e_j = np.zeros(len(x_k)) 
-        j = np.random.randint(self.args['d'])
-        e_j[j] = 1
+        grad_f_list_cur = self.grad_f(x_k, self.args)
 
-        grad_j = self.grad_f_j(x_k, j, self.args).real
-        
-        g_k = self.args['d'] * e_j * (grad_j - h_k[j]) + h_k
-        h_k_new = h_k + e_j * (grad_j - h_k[j])
-        
-        return x_k - gamma*g_k, h_k_new
+        c_k = np.random.binomial(n = 1, p = p_marina)
+        g_list_new = np.zeros_like(grad_f_list_cur)
+        g_new = np.zeros_like(grad_f_list_cur[0])
+
+        for i in range(self.n_workers):
+            x_new = x_k - gamma*g_k
+            grad_f_list_new = self.grad_f(x_new, self.args)
+            if c_k == 1:
+                g_list_new[i] = self.grad_f(x_new, self.args)[i]
+            else:
+                if self.rand_k_activate is True:
+                    g_list_new[i] = GradientOptimizer.rand_k_compressor(self, grad_f_list_new[i] - grad_f_list_cur[i])
+                else:
+                    g_list_new[i] = GradientOptimizer.top_k_compressor(self, grad_f_list_new[i] - grad_f_list_cur[i])
+
+            g_new += g_list_new[i]
+        g_new /= self.n_workers
+
+        return x_new, g_new
     
     #---DESCENT------------------------------------------------------------------------------------------
            
@@ -287,13 +317,15 @@ class GradientOptimizer:
         h_k = grad_list
         errors_list = np.zeros_like(self.grad_f(x_k, self.args)) #for the ef_gd_step method
         h_list = grad_list                                        #for the diana_step 
-        g_list = []
+        g_list = []                                              #for ef21 step
         for i in range(self.n_workers):
             if self.rand_k_activate is True:
                 g_i = GradientOptimizer.rand_k_compressor(self, grad_list[i])
             else:
                 g_i = GradientOptimizer.top_k_compressor(self, grad_list[i])
             g_list.append(g_i)
+
+        g_k = np.sum(grad_list, axis = 0) / len(grad_list)      #for marina step
         
         t_start = time.time()
         
@@ -315,6 +347,8 @@ class GradientOptimizer:
                 x_k, h_list = GradientOptimizer.diana_step(self, x_k, k, h_list)
             elif self.ef21_activate is True:
                 x_k, g_list = GradientOptimizer.ef21_step(self, x_k, k, g_list)
+            elif self.marina_activate is True:
+                x_k, g_k = GradientOptimizer.marina(self, x_k, k, self.p_marina, g_k)
             else:
                 x_k = GradientOptimizer.gd_step(self, x_k, k)
                 
