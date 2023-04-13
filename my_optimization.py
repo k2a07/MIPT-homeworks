@@ -16,7 +16,7 @@ class GradientOptimizer:
                  n_coord = 1, sega_activate = False, n_workers = 1, top_k_activate = False, 
                  rand_k_activate = False, ef_activate = False, top_k_param = 0, rand_k_param = 0, 
                  diana_activate = False, acc_k = None, upper_limit = 1e10, ef21_activate = False, marina_activate = False,
-                 p_marina = 0.5):
+                 p_marina = 0.5, momentum_gd_activate = False):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
@@ -47,6 +47,8 @@ class GradientOptimizer:
         :parameter ef21_activate: activate ef21
         :parameter marina_activate: activate marina
         :parameter p_marina: probability of transmitting the whole gradient (not compressed one)
+        HW3
+        :parameter momentum_gd_activate: avtivate momentum gradient descent
         '''
         
         self.f = f
@@ -79,6 +81,8 @@ class GradientOptimizer:
         self.ef21_activate = ef21_activate
         self.marina_activate = marina_activate
         self.p_marina = p_marina
+        #HW3
+        self.momentum_gd_activate = momentum_gd_activate
 
     #---COMPRESSORS------------------------------------------------------------------------------------------
 
@@ -141,30 +145,18 @@ class GradientOptimizer:
         gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
         
         return x_k - gamma * master_grad
+    
+    #---HW3----------------------------------------------------------------------------------------
 
-    def ef_gd_step(self, x_k, k, errors_list):
-        '''
-        Error Feedback Gradient Descent step
-        '''
-        grad_list = self.grad_f(x_k, self.args)
-        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+    def momentum_gd_step(self, x_k, k, x_prev):
+        gamma_momentum = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        lr = 1/self.args['L']
+        
+        grad = self.grad_f(x_k, self.args)[0]
 
-        #Worker's calculation of EF
-        displaced_grad_list = np.zeros_like(grad_list)
-        for i in range(self.n_workers):
-            if self.rand_k_activate is True:
-                displaced_grad_list[i] = GradientOptimizer.rand_k_compressor(self, errors_list[i] + gamma * grad_list[i])
-            else:
-                displaced_grad_list[i] = GradientOptimizer.top_k_compressor(self, errors_list[i] + gamma * grad_list[i])    
-            errors_list[i] = errors_list[i] + gamma * grad_list[i] - displaced_grad_list[i]
-
-        #Master's calculations
-        master_grad = np.zeros(len(grad_list[0]))
-        for i in range(self.n_workers):
-            master_grad += displaced_grad_list[i]
-        master_grad /= self.n_workers
-
-        return x_k - master_grad, errors_list
+        return x_k - lr * grad + gamma_momentum * (x_k - x_prev)
+    
+    #---HW5----------------------------------------------------------------------------------------
     
     def sgd_step(self, x_k, k):
         '''
@@ -175,6 +167,8 @@ class GradientOptimizer:
         ksi_k = np.mean([np.random.normal(0, 10, len(x_k)) for _ in range(batch_size)])
         
         return x_k - gamma * (self.grad_f(x_k, self.args) + ksi_k)
+    
+    #---HW6----------------------------------------------------------------------------------------
     
     def csgd_step(self, x_k, k):
         '''
@@ -214,6 +208,8 @@ class GradientOptimizer:
         
         return x_k - gamma*g_k, h_k_new
     
+    #---HW7----------------------------------------------------------------------------------------
+    
     def diana_step(self, x_k, k, h_list):
         '''
         DIANA step
@@ -251,6 +247,31 @@ class GradientOptimizer:
         master_grad /= self.n_workers
 
         return x_k - gamma * master_grad, h_list
+    
+    
+    def ef_gd_step(self, x_k, k, errors_list):
+        '''
+        Error Feedback Gradient Descent step
+        '''
+        grad_list = self.grad_f(x_k, self.args)
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+
+        #Worker's calculation of EF
+        displaced_grad_list = np.zeros_like(grad_list)
+        for i in range(self.n_workers):
+            if self.rand_k_activate is True:
+                displaced_grad_list[i] = GradientOptimizer.rand_k_compressor(self, errors_list[i] + gamma * grad_list[i])
+            else:
+                displaced_grad_list[i] = GradientOptimizer.top_k_compressor(self, errors_list[i] + gamma * grad_list[i])    
+            errors_list[i] = errors_list[i] + gamma * grad_list[i] - displaced_grad_list[i]
+
+        #Master's calculations
+        master_grad = np.zeros(len(grad_list[0]))
+        for i in range(self.n_workers):
+            master_grad += displaced_grad_list[i]
+        master_grad /= self.n_workers
+
+        return x_k - master_grad, errors_list
     
     def ef21_step(self, x_k, k, g_list):
         '''
@@ -290,8 +311,9 @@ class GradientOptimizer:
         g_list_new = np.zeros_like(grad_f_list_cur)
         g_new = np.zeros_like(grad_f_list_cur[0])
 
+        x_new = x_k - gamma*g_k
+
         for i in range(self.n_workers):
-            x_new = x_k - gamma*g_k
             grad_f_list_new = self.grad_f(x_new, self.args)
             if c_k == 1:
                 g_list_new[i] = self.grad_f(x_new, self.args)[i]
@@ -349,6 +371,9 @@ class GradientOptimizer:
                 x_k, g_list = GradientOptimizer.ef21_step(self, x_k, k, g_list)
             elif self.marina_activate is True:
                 x_k, g_k = GradientOptimizer.marina(self, x_k, k, self.p_marina, g_k)
+            elif self.momentum_gd_activate is True:
+                x_k, x_prev = GradientOptimizer.momentum_gd_step(self, x_k, k, x_prev)
+            
             else:
                 x_k = GradientOptimizer.gd_step(self, x_k, k)
                 
@@ -419,6 +444,7 @@ def f_quad_grad(x, args):
 def f_quad_grad_j(x, j, args):
     return args['A'][j] @ x - args['b'][j]    
 
+#HW 5?
 def SAGA(n_iter, lr, R, f_arr, nodes_count, x_0):
     arr_n = [i for i in range(nodes_count)]
     phi = [x_0]*nodes_count
