@@ -94,8 +94,7 @@ class GradientOptimizer:
 
         if self.top_k_activate is True:
             for i in range(self.n_workers):
-                grad_list[i] = GradientOptimizer.top_k_compressor(self, grad_list[i])
-            
+                grad_list[i] = GradientOptimizer.top_k_compressor(self, grad_list[i])    
         elif self.rand_k_activate is True:
             for i in range(self.n_workers):
                 grad_list[i] = GradientOptimizer.rand_k_compressor(self, grad_list[i])
@@ -136,13 +135,12 @@ class GradientOptimizer:
         Basic Gradient Descent step
         '''
         compressed_grad_list = GradientOptimizer.grad_list_compressor(self, x_k)
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
 
-        master_grad = np.zeros(len(compressed_grad_list[0]))
+        master_grad = np.zeros_like(x_k)
         for i in range(self.n_workers):
             master_grad += compressed_grad_list[i]
-        master_grad /= (2*self.n_workers) #IDK WHY 2n BUT IT IS IN HW7 TASK 1
-
-        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        master_grad /= (self.n_workers) #IDK WHY 2n BUT IT IS IN HW7 TASK 1
         
         return x_k - gamma * master_grad
     
@@ -154,7 +152,7 @@ class GradientOptimizer:
         
         grad = self.grad_f(x_k, self.args)[0]
 
-        return x_k - lr * grad + gamma_momentum * (x_k - x_prev)
+        return x_k - lr * grad + gamma_momentum * (x_k - x_prev), x_k
     
     #---HW5----------------------------------------------------------------------------------------
     
@@ -164,7 +162,7 @@ class GradientOptimizer:
         '''
         gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
         
-        ksi_k = np.mean([np.random.normal(0, 10, len(x_k)) for _ in range(batch_size)])
+        ksi_k = np.mean([np.random.normal(0, 10, len(x_k)) for _ in range(self.batch_size)])
         
         return x_k - gamma * (self.grad_f(x_k, self.args) + ksi_k)
     
@@ -335,17 +333,19 @@ class GradientOptimizer:
         This function realizes the descent to the optimum using one of the gradient-based methods
         '''
         x_k = np.copy(self.x_0)
+        x_prev = np.copy(self.x_0)
         grad_list = self.grad_f(self.x_0, self.args)
         h_k = grad_list
         errors_list = np.zeros_like(self.grad_f(x_k, self.args)) #for the ef_gd_step method
         h_list = grad_list                                        #for the diana_step 
-        g_list = []                                              #for ef21 step
-        for i in range(self.n_workers):
-            if self.rand_k_activate is True:
-                g_i = GradientOptimizer.rand_k_compressor(self, grad_list[i])
-            else:
-                g_i = GradientOptimizer.top_k_compressor(self, grad_list[i])
-            g_list.append(g_i)
+        g_list = []                   
+        if self.ef21_activate is True:                           #for ef21 step
+            for i in range(self.n_workers):
+                if self.rand_k_activate is True:
+                    g_i = GradientOptimizer.rand_k_compressor(self, grad_list[i])
+                else:
+                    g_i = GradientOptimizer.top_k_compressor(self, grad_list[i])
+                g_list.append(g_i)
 
         g_k = np.sum(grad_list, axis = 0) / len(grad_list)      #for marina step
         
@@ -495,16 +495,16 @@ def d_logloss_mushrooms(w, args):
         ans += np.log(1 + np.exp(-(w @ args["X_train"][i]) * args["y_train"][i]))
     return ans / len(args["X_train"])
 
-def d_logloss_grad_mushrooms(w, args):
+def d_logloss_grad_mushrooms (w, args):
     grad_list = []
     for j in range(args['n_workers']):
-        n_samples = len(args['X_train_list'][j]) #(650)
+        n_samples = len(args['X_train_list'][j]) 
         
-        grad_j = np.zeros(w.size) #(112, )
+        grad_j = np.zeros(w.size) 
 
         for i in range(n_samples):
-            grad_j += - args['y_train_list'][j][i] * args['X_train_list'][j][i] * np.exp(-w.dot(args['X_train_list'][j][i]) * args["y_train_list"][j][i]) / (1 + np.exp(- w.dot(args['X_train_list'][j][i]) * args['X_train_list'][j][i]))
-        grad_j / n_samples
+            grad_j -= np.real(args['y_train_list'][j][i] * args['X_train_list'][j][i] * np.exp(- w.dot(args['X_train_list'][j][i]) * args["y_train_list"][j][i]) / (1 + np.exp(- w.dot(args['X_train_list'][j][i]) * args['X_train_list'][j][i])))
+        grad_j /= n_samples
         grad_list.append(grad_j)
         
     return grad_list
@@ -515,7 +515,7 @@ def logloss_grad_mushrooms(w, args):
     grad = np.zeros(w.size)
 
     for i in range(n_samples):
-        grad += - args['y_train'][i] * args['X_train'][i] * np.exp(-w.dot(args['X_train'][i]) * args["y_train_list"][i]) / (1 + np.exp(- w.dot(args['X_train'][i]) * args['X_train'][i]))
+        grad -= np.real(args['y_train'][i] * args['X_train'][i] * np.exp(-w.dot(args['X_train'][i]) * args["y_train"][i]) / (1 + np.exp(- w.dot(args['X_train'][i]) * args['X_train'][i])))
     grad /= n_samples
             
     return grad
