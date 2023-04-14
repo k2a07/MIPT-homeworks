@@ -391,6 +391,8 @@ class GradientOptimizer:
                 g_list.append(g_i)
 
         g_k = np.sum(grad_list, axis = 0) / len(grad_list)      #for marina step
+        y_k = np.copy(self.x_0) #for restart
+        theta_k = 1             #for restart
         
         t_start = time.time()
         
@@ -419,7 +421,7 @@ class GradientOptimizer:
             elif self.nesterov_momentum_activate is True:
                 x_k, x_prev = GradientOptimizer.nesterov_momentum_step(self, x_k, k, x_prev)
             elif self.restart_activate is True:
-                pass
+                x_k, y_k, theta_k = GradientOptimizer.restart_step(self, x_k, k, y_k, theta_k)
             else:
                 x_k = GradientOptimizer.gd_step(self, x_k, k)
                 
