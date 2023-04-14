@@ -16,7 +16,7 @@ class GradientOptimizer:
                  n_coord = 1, sega_activate = False, n_workers = 1, top_k_activate = False, 
                  rand_k_activate = False, ef_activate = False, top_k_param = 0, rand_k_param = 0, 
                  diana_activate = False, acc_k = None, upper_limit = 1e10, ef21_activate = False, marina_activate = False,
-                 p_marina = 0.5, momentum_gd_activate = False):
+                 p_marina = 0.5, momentum_gd_activate = False, nesterov_momentum_activate = False, momentum_coeff_k = 0):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
@@ -48,7 +48,9 @@ class GradientOptimizer:
         :parameter marina_activate: activate marina
         :parameter p_marina: probability of transmitting the whole gradient (not compressed one)
         HW3
-        :parameter momentum_gd_activate: avtivate momentum gradient descent
+        :parameter momentum_gd_activate: activate momentum gradient descent
+        :parameter nesterov_momentum_activate: activate nesterov momentum algorithm
+        :parameter momentum_coeff_k: the coefficient in front of the momentum 
         '''
         
         self.f = f
@@ -83,6 +85,8 @@ class GradientOptimizer:
         self.p_marina = p_marina
         #HW3
         self.momentum_gd_activate = momentum_gd_activate
+        self.nesterov_momentum_activate = nesterov_momentum_activate
+        self.momentum_coeff_k = momentum_coeff_k
 
     #---COMPRESSORS------------------------------------------------------------------------------------------
 
@@ -134,26 +138,42 @@ class GradientOptimizer:
         '''
         Basic Gradient Descent step
         '''
-        compressed_grad_list = GradientOptimizer.grad_list_compressor(self, x_k)
         gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
-
-        master_grad = np.zeros_like(x_k)
-        for i in range(self.n_workers):
-            master_grad += compressed_grad_list[i]
-        master_grad /= (self.n_workers) #IDK WHY 2n BUT IT IS IN HW7 TASK 1
         
-        return x_k - gamma * master_grad
+        if self.n_workers > 1:
+            compressed_grad_list = GradientOptimizer.grad_list_compressor(self, x_k)
+
+            master_grad = np.zeros_like(x_k)
+            for i in range(self.n_workers):
+                master_grad += compressed_grad_list[i]
+            master_grad /= (self.n_workers) #IDK WHY 2n BUT IT IS IN HW7 TASK 1
+            
+            return x_k - gamma * master_grad
+        else:
+            grad = self.grad_f(x_k, self.args)
+            return x_k - gamma * grad
+
     
     #---HW3----------------------------------------------------------------------------------------
 
     def momentum_gd_step(self, x_k, k, x_prev):
-        gamma_momentum = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
-        lr = 1/self.args['L']
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        momentum_coeff_k = self.momentum_coeff_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
         
-        grad = self.grad_f(x_k, self.args)[0]
+        grad = self.grad_f(x_k, self.args)
 
-        return x_k - lr * grad + gamma_momentum * (x_k - x_prev), x_k
+        return x_k - gamma * grad + momentum_coeff_k * (x_k - x_prev), x_k
     
+    def nesterov_momentum_step(self, x_k, k, x_prev):
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        momentum_coeff_k = self.momentum_coeff_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+   
+        y_k = x_k + momentum_coeff_k*(x_k - x_prev)
+
+        x_new = y_k - gamma * self.grad_f(y_k, self.args)
+
+        return x_new, x_k
+        
     #---HW5----------------------------------------------------------------------------------------
     
     def sgd_step(self, x_k, k):
@@ -333,7 +353,7 @@ class GradientOptimizer:
         This function realizes the descent to the optimum using one of the gradient-based methods
         '''
         x_k = np.copy(self.x_0)
-        x_prev = np.copy(self.x_0)
+        x_prev = np.copy(self.x_0)                                #for momentum algorithms
         grad_list = self.grad_f(self.x_0, self.args)
         h_k = grad_list
         errors_list = np.zeros_like(self.grad_f(x_k, self.args)) #for the ef_gd_step method
@@ -373,6 +393,8 @@ class GradientOptimizer:
                 x_k, g_k = GradientOptimizer.marina(self, x_k, k, self.p_marina, g_k)
             elif self.momentum_gd_activate is True:
                 x_k, x_prev = GradientOptimizer.momentum_gd_step(self, x_k, k, x_prev)
+            elif self.nesterov_momentum_activate is True:
+                x_k, x_prev = GradientOptimizer.nesterov_momentum_step(self, x_k, k, x_prev)
             
             else:
                 x_k = GradientOptimizer.gd_step(self, x_k, k)
@@ -569,3 +591,43 @@ def frank_wolfe(d, n_iter, X):
         times.append(to_diff(t_0, dt.now()))
 
     return crit_arr, times
+
+'''
+#------------------------------------------from HW3 version 1
+def Momentum_Grad_Descent(n_iter, X, lr, gamma, y, w_0, n):
+    points = []
+    w_old = w_0
+    for i in range(n_iter):
+        grad = Get_grad (X, y, w_old, n)
+        if i < 2:
+            w_new = w_old - lr*grad 
+        else:
+            w_new = w_old - lr*grad - gamma*(points[i] - points[i - 1])
+        w_old = w_new 
+        points.append(w_old)
+    return points
+
+def Momentum_Draw_Graph (n_iter, X, lr, gamma, y, w_0, n, w_true, criteria): 
+    points = Momentum_Grad_Descent(n_iter, X, lr, gamma, y, w_0, n)
+    diff_arr, crit_arr, x = [], [], []
+
+    for i in range(n_iter):
+        x.append(i + 1)
+        diff_arr.append(points[i] - w_true)
+        if criteria == "x_criteria":
+            crit_arr.append(np.linalg.norm(diff_arr[i]))
+        elif criteria == "f_criteria":
+            crit_arr.append(np.abs(Logloss(X, y, points[i], n) - Logloss(X, y, w_true, n)))
+
+    y = crit_arr
+    if criteria == "x_criteria":
+        plt.plot(x, y, label = "||w^k - w*||")
+    elif criteria == "f_criteria":
+        plt.plot(x, y, label = "|f(w^k) - f(w*)|")
+
+    plt.xlabel('n_iter')
+    plt.ylabel('criteria')
+    plt.title('Standard axis convergence')
+    plt.legend()
+    plt.show()
+'''
