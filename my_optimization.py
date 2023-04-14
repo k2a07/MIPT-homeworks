@@ -16,7 +16,8 @@ class GradientOptimizer:
                  n_coord = 1, sega_activate = False, n_workers = 1, top_k_activate = False, 
                  rand_k_activate = False, ef_activate = False, top_k_param = 0, rand_k_param = 0, 
                  diana_activate = False, acc_k = None, upper_limit = 1e10, ef21_activate = False, marina_activate = False,
-                 p_marina = 0.5, momentum_gd_activate = False, nesterov_momentum_activate = False, momentum_coeff_k = 0):
+                 p_marina = 0.5, momentum_gd_activate = False, nesterov_momentum_activate = False, momentum_coeff_k = 0,
+                 restart_activate = False):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
@@ -51,6 +52,7 @@ class GradientOptimizer:
         :parameter momentum_gd_activate: activate momentum gradient descent
         :parameter nesterov_momentum_activate: activate nesterov momentum algorithm
         :parameter momentum_coeff_k: the coefficient in front of the momentum 
+        :parameter restart_activate: activate restart method in accelerated method
         '''
         
         self.f = f
@@ -87,6 +89,7 @@ class GradientOptimizer:
         self.momentum_gd_activate = momentum_gd_activate
         self.nesterov_momentum_activate = nesterov_momentum_activate
         self.momentum_coeff_k = momentum_coeff_k
+        self.restart_activate = restart_activate
 
     #---COMPRESSORS------------------------------------------------------------------------------------------
 
@@ -173,7 +176,27 @@ class GradientOptimizer:
         x_new = y_k - gamma * self.grad_f(y_k, self.args)
 
         return x_new, x_k
-        
+    
+    #---Bonus--------------------------------------------------------------------------------------
+
+    def restart_step(self, x_k, k, y_k, theta_k):
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        q = self.args['q'] #\in [0; 1]
+
+        x_new = y_k - gamma * self.grad_f(y_k, self.args)
+
+        #solving quadratic equation theta_new^2 + theta_new * (theta_k^2 - q) - theta_k^2 = 0
+        D = (theta_k**2 - q)**2 + 4*theta_k**2
+        theta_new = (-1 * (theta_k**2 - q) + np.sqrt(D))/ 2
+
+        beta_new = theta_k * (1 - theta_k) / (theta_k**2 + theta_new)
+
+        y_new = x_new + beta_new * (x_new - x_k)
+
+        return x_new, y_new, theta_new
+    
+    #---HW4----------------------------------------------------------------------------------------
+
     #---HW5----------------------------------------------------------------------------------------
     
     def sgd_step(self, x_k, k):
@@ -395,7 +418,8 @@ class GradientOptimizer:
                 x_k, x_prev = GradientOptimizer.momentum_gd_step(self, x_k, k, x_prev)
             elif self.nesterov_momentum_activate is True:
                 x_k, x_prev = GradientOptimizer.nesterov_momentum_step(self, x_k, k, x_prev)
-            
+            elif self.restart_activate is True:
+                pass
             else:
                 x_k = GradientOptimizer.gd_step(self, x_k, k)
                 
