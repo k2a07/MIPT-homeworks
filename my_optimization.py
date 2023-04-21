@@ -14,7 +14,7 @@ class VariatonalOptimizer:
     '''
     def __init__(self, f, grad_f_x, grad_f_y, x_0, y_0, gamma_k, args, n_iter = 100, criterium = '||x_k - x^*||', 
                  y_lim = 1e-5, z_true = None, projection_activate = False, projection_operator = None,
-                 extragradient_activate = False):
+                 extragradient_activate = False, smp_activate = False):
         '''
         :parameter f: target function
         :parameter grad_f_x and grad_f_y: function gradients by x and y
@@ -27,6 +27,7 @@ class VariatonalOptimizer:
         :parameter projection_activate: activate projection in descent algorithm
         :parameter projection_operator: projection operator in descent algorithm
         :parameter extragradient_activate: activate extragradient method
+        :parameter smp_activate: activate smp
         '''
         #HW8
         self.f = f
@@ -43,6 +44,7 @@ class VariatonalOptimizer:
         self.projection_activate = projection_activate
         self.projection_operator = projection_operator
         self.extragradient_activate = extragradient_activate
+        self.smp_activate = smp_activate
 
     def gd_step(self, x_k, y_k, k):
         '''
@@ -81,6 +83,33 @@ class VariatonalOptimizer:
 
         return x_new, y_new, x_temp, y_temp
 
+    def smp_step(self, w_x_k, w_y_k, r_x_k, r_y_k, k):
+        '''
+        Realization of the step od SMP (Stochastic Mirror Prox algorithm: https://arxiv.org/pdf/0809.0815.pdf)
+        '''
+        gamma = self.gamma_k(k, self.args)
+
+        def smp_prox_operator(z, ksi):
+            prox = np.zeros_like(z)
+            normalize = np.sum(z * np.exp(ksi))
+            for j in range(len(z)):
+                prox[j] = z[j] * np.exp(ksi[j]) / normalize
+            return prox
+        
+        w_x_k = smp_prox_operator(r_x_k, gamma * self.grad_f_x(r_x_k, r_y_k, self.args))
+        w_y_k = smp_prox_operator(r_y_k, gamma * ( - self.grad_f_y(r_x_k, r_y_k, self.args)))
+        r_x_k = smp_prox_operator(r_x_k, gamma * self.grad_f_x(w_x_k, w_y_k, self.args))
+        r_y_k = smp_prox_operator(r_y_k, gamma * ( - self.grad_f_y(w_x_k, w_y_k, self.args)))
+
+        if self.projection_activate is True:
+            w_x_k = self.projection_operator(w_x_k, self.args)
+            w_y_k = self.projection_operator(w_y_k, self.args)
+            r_x_k = self.projection_operator(r_x_k, self.args)
+            r_y_k = self.projection_operator(r_y_k, self.args)
+
+        return w_x_k, w_y_k, r_x_k, r_y_k, gamma
+
+
     def descent(self):
         '''
         Function to descent to the optimum
@@ -89,13 +118,28 @@ class VariatonalOptimizer:
         z_0 = np.hstack([self.x_0, self.y_0])
     
         x_k, y_k = np.copy(self.x_0), np.copy(self.y_0)
-        x_temp, y_temp = np.copy(self.x_0), np.copy(self.y_0) #for extragradient step
+        #for extragradient
+        x_temp, y_temp = np.copy(self.x_0), np.copy(self.y_0)
+        #for smp 
+        w_x_k, w_y_k, r_x_k, r_y_k = np.copy(self.x_0), np.copy(self.y_0), np.copy(self.x_0), np.copy(self.y_0)
+        gamma_sum, gamma_w_x_sum, gamma_w_y_sum = 0, np.zeros_like(self.x_0), np.zeros_like(self.y_0)
 
         gradient_calls = 0 #consider an operator's gradient call
         for k in tqdm(range(self.n_iter)):     
             if self.extragradient_activate is True:
                 x_k, y_k, x_temp, y_temp = VariatonalOptimizer.extragradient_step(self, x_k, y_k, x_temp, y_temp, k)
                 gradient_calls += 2
+            elif self.smp_activate is True:
+                w_x_k, w_y_k, r_x_k, r_y_k, gamma = VariatonalOptimizer.smp_step(self, w_x_k, w_y_k, r_x_k, r_y_k, k)
+                
+                gradient_calls += 2
+                gamma_sum += gamma
+                gamma_w_x_sum += gamma * w_x_k
+                gamma_w_y_sum += gamma * w_y_k
+                
+                x_k = gamma_w_x_sum / gamma_sum
+                y_k = gamma_w_y_sum / gamma_sum
+
             else:
                 x_k, y_k = VariatonalOptimizer.gd_step(self, x_k, y_k, k)
                 gradient_calls += 1
@@ -108,6 +152,8 @@ class VariatonalOptimizer:
                 differences_arr.append(np.linalg.norm(z_k - self.z_true, ord = 2))
             elif self.criterium == 'relative ||z_k - z^*||':
                 differences_arr.append(np.linalg.norm(z_k - self.z_true, ord = 2) / np.linalg.norm(z_0 - self.z_true, ord = 2))
+            elif self.criterium == 'Errvi':
+                differences_arr.append(np.max(self.args['A'] @ x_k) - np.min(self.args['A'] @ y_k))
             else:
                 AssertionError
         return points_arr, differences_arr, gradient_calls_arr
