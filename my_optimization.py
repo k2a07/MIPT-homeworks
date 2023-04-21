@@ -8,27 +8,134 @@ import time
 from sklearn.metrics import mean_squared_error, accuracy_score
 from tqdm import tqdm
 
-#Class of Gradient Methods Optimizers
+class VariatonalOptimizer:
+    '''
+    Class of Optimization Methods for Variatonal Inequality Problems
+    '''
+    def __init__(self, f, grad_f_x, grad_f_y, x_0, y_0, gamma_k, args, n_iter = 100, criterium = '||x_k - x^*||', 
+                 y_lim = 1e-5, z_true = None, projection_activate = False, projection_operator = None,
+                 extragradient_activate = False):
+        '''
+        :parameter f: target function
+        :parameter grad_f_x and grad_f_y: function gradients by x and y
+        :parameter x_0 and y_0: starting point
+        :parameter args: the arguments of the optimization problem
+        :parameter n_iter: number of iterations
+        :parameter criterium: criterium of convergence, options: 'relative ||z_k - z^*||', '||z_k - z^*||'
+        :parameter y_lim: target difference from z_k and z^*
+        :parameter z_true: true optimum
+        :parameter projection_activate: activate projection in descent algorithm
+        :parameter projection_operator: projection operator in descent algorithm
+        :parameter extragradient_activate: activate extragradient method
+        '''
+        #HW8
+        self.f = f
+        self.grad_f_x = grad_f_x
+        self.grad_f_y = grad_f_y
+        self.x_0 = x_0
+        self.y_0 = y_0
+        self.gamma_k = gamma_k
+        self.args = args
+        self.n_iter = n_iter
+        self.criterium = criterium
+        self.y_lim = y_lim
+        self.z_true = z_true
+        self.projection_activate = projection_activate
+        self.projection_operator = projection_operator
+        self.extragradient_activate = extragradient_activate
+
+    def gd_step(self, x_k, y_k, k):
+        '''
+        Basic Gradient Descent step
+        '''
+        gamma = self.gamma_k(k, self.args)
+
+        x_new = x_k - gamma * self.grad_f_x(x_k, y_k, self.args)
+        y_new = y_k + gamma * self.grad_f_y(x_k, y_k, self.args)
+
+        if self.projection_activate is True:
+            x_new = self.projection_operator(x_new, self.args)
+            y_new = self.projection_operator(y_new, self.args)
+
+        return x_new, y_new
+    
+    def extragradient_step(self, x_k, y_k, x_temp, y_temp, k):
+        '''
+        Extragradient step
+        '''
+        gamma = self.gamma_k(k, self.args)
+
+        x_temp = x_k - gamma * self.grad_f_x(x_temp, y_temp, self.args)
+        y_temp = y_k + gamma * self.grad_f_y(y_temp, y_temp, self.args)
+
+        if self.projection_activate is True:
+            x_temp = self.projection_operator(x_temp, self.args)
+            y_temp = self.projection_operator(y_temp, self.args)
+        
+        x_new = x_k - gamma * self.grad_f_x(x_temp, y_temp, self.args)
+        y_new = y_k + gamma * self.grad_f_y(y_temp, y_temp, self.args)
+
+        if self.projection_activate is True:
+            x_new = self.projection_operator(x_new, self.args)
+            y_new = self.projection_operator(y_new, self.args)
+
+        return x_new, y_new, x_temp, y_temp
+
+    def descent(self):
+        '''
+        Function to descent to the optimum
+        '''
+        differences_arr, points_arr, gradient_calls_arr = [], [], []
+        z_0 = np.hstack([self.x_0, self.y_0])
+    
+        x_k, y_k = np.copy(self.x_0), np.copy(self.y_0)
+        x_temp, y_temp = np.copy(self.x_0), np.copy(self.y_0) #for extragradient step
+
+        gradient_calls = 0 #consider an operator's gradient call
+        for k in tqdm(range(self.n_iter)):     
+            if self.extragradient_activate is True:
+                x_k, y_k, x_temp, y_temp = VariatonalOptimizer.extragradient_step(self, x_k, y_k, x_temp, y_temp, k)
+                gradient_calls += 2
+            else:
+                x_k, y_k = VariatonalOptimizer.gd_step(self, x_k, y_k, k)
+                gradient_calls += 1
+                
+            z_k = np.hstack([x_k, y_k])
+            points_arr.append(z_k)
+            gradient_calls_arr.append(gradient_calls)
+
+            if self.criterium == '||z_k - z^*||':
+                differences_arr.append(np.linalg.norm(z_k - self.z_true, ord = 2))
+            elif self.criterium == 'relative ||z_k - z^*||':
+                differences_arr.append(np.linalg.norm(z_k - self.z_true, ord = 2) / np.linalg.norm(z_0 - self.z_true, ord = 2))
+            else:
+                AssertionError
+        return points_arr, differences_arr, gradient_calls_arr
+
 class GradientOptimizer:
+    '''
+    Class of Gradient Methods Optimizers for regular optimization problems
+    '''
     def __init__(self, f, grad_f, x_0, gamma_k, args, n_iter = 1000, n = 1, criterium = '||x_k - x^*||', 
-                 y_lim = 1e-8, x_true = None, sgd_activate = False, batch_size = 1, svrg_activate = False, 
-                 sarah_activate = False, csgd_activate = False, grad_f_j = None, is_independent = False, 
+                 y_lim = 1e-8, x_true = None, csgd_activate = False, grad_f_j = None, is_independent = False, 
                  n_coord = 1, sega_activate = False, n_workers = 1, top_k_activate = False, 
                  rand_k_activate = False, ef_activate = False, top_k_param = 0, rand_k_param = 0, 
                  diana_activate = False, acc_k = None, upper_limit = 1e10, ef21_activate = False, marina_activate = False,
                  p_marina = 0.5, momentum_gd_activate = False, nesterov_momentum_activate = False, momentum_coeff_k = 0,
-                 restart_activate = False):
+                 restart_activate = False, noisy_gradient_activate = False, ksi_sigma = 10, sgd_activate = False, 
+                 batch_size = 1, svrg_activate = False, sarah_activate = False,):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
         :parameter x_0: starting point
         :parameter gamma_k: learning rate function depending on the number of current iteration k
+        :parameter args: the arguments of the optimization problem
         :parameter n_iter: number of iterations
         :parameter n: number of workers (functions to optimize)
         :parameter args: includes parameters of functions
         :parameter criterium: criterium of convergence, options: '||x_k - x^*||', '|f(x_k) - f(x^*)|', '||grad_f(x_k)||'
         :parameter y_lim: target difference from x_k and x^*
-        :parameter x_true: trueoptimum
+        :parameter x_true: true optimum
         :parameter sgd_activate: activate sgd
         :parameter batch_size: number of batches (by default equals to 1)
         :parameter svrg_activate: activate svrg
@@ -53,8 +160,10 @@ class GradientOptimizer:
         :parameter nesterov_momentum_activate: activate nesterov momentum algorithm
         :parameter momentum_coeff_k: the coefficient in front of the momentum 
         :parameter restart_activate: activate restart method in accelerated method
+        HW5
+        :parameter noisy_gradient_activate: activate noisy gradient method
+        :parameter ksi_sigma: sqrt(variance of ksi) in noisy gradient method
         '''
-        
         self.f = f
         self.grad_f = grad_f
         self.x_0 = x_0
@@ -65,14 +174,24 @@ class GradientOptimizer:
         self.y_lim = y_lim
         self.x_true = x_true
         self.criterium = criterium
-        self.sgd_activate = sgd_activate
-        self.svrg_activate = svrg_activate
-        self.sarah_activate = sarah_activate
         self.csgd_activate = csgd_activate
         self.grad_f_j = grad_f_j
         self.is_independent = is_independent
         self.n_coord = n_coord
         self.sega_activate = sega_activate
+        #HW3
+        self.momentum_gd_activate = momentum_gd_activate
+        self.nesterov_momentum_activate = nesterov_momentum_activate
+        self.momentum_coeff_k = momentum_coeff_k
+        self.restart_activate = restart_activate
+        #HW5
+        self.noisy_gradient_activate = noisy_gradient_activate
+        self.ksi_sigma = ksi_sigma
+        self.batch_size = batch_size
+        self.sgd_activate = sgd_activate
+        self.svrg_activate = svrg_activate
+        self.sarah_activate = sarah_activate
+        #HW7
         self.n_workers = n_workers
         self.top_k_activate = top_k_activate
         self.top_k_param = top_k_param
@@ -85,11 +204,6 @@ class GradientOptimizer:
         self.ef21_activate = ef21_activate
         self.marina_activate = marina_activate
         self.p_marina = p_marina
-        #HW3
-        self.momentum_gd_activate = momentum_gd_activate
-        self.nesterov_momentum_activate = nesterov_momentum_activate
-        self.momentum_coeff_k = momentum_coeff_k
-        self.restart_activate = restart_activate
 
     #---COMPRESSORS------------------------------------------------------------------------------------------
 
@@ -199,15 +313,25 @@ class GradientOptimizer:
 
     #---HW5----------------------------------------------------------------------------------------
     
+    def noisy_gradient_step(self, x_k, k):
+        '''
+        Noisy Gradient Descent step
+        '''
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        
+        ksi_k = np.mean([np.random.normal(0, self.ksi_sigma, len(x_k)) for _ in range(self.batch_size)])
+        
+        return x_k - gamma * (self.grad_f(x_k, self.args) + ksi_k)
+
     def sgd_step(self, x_k, k):
         '''
         Stochastic Gradient Descent step
         '''
         gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
         
-        ksi_k = np.mean([np.random.normal(0, 10, len(x_k)) for _ in range(self.batch_size)])
+        j = np.random.randint(len(x_k))
         
-        return x_k - gamma * (self.grad_f(x_k, self.args) + ksi_k)
+        return x_k - 1/len(x_k) * gamma * (self.grad_f_j(x_k, j, self.args))
     
     #---HW6----------------------------------------------------------------------------------------
     
@@ -422,6 +546,8 @@ class GradientOptimizer:
                 x_k, x_prev = GradientOptimizer.nesterov_momentum_step(self, x_k, k, x_prev)
             elif self.restart_activate is True:
                 x_k, y_k, theta_k = GradientOptimizer.restart_step(self, x_k, k, y_k, theta_k)
+            elif self.noisy_gradient_activate is True:
+                x_k = GradientOptimizer.noisy_gradient_step(self, x_k, k)
             else:
                 x_k = GradientOptimizer.gd_step(self, x_k, k)
                 
