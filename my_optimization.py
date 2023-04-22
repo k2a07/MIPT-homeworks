@@ -69,10 +69,10 @@ class VariatonalOptimizer:
 
         x_temp = x_k - gamma * self.grad_f_x(x_temp, y_temp, self.args)
         y_temp = y_k + gamma * self.grad_f_y(y_temp, y_temp, self.args)
-
-        if self.projection_activate is True:
+        
+        '''if self.projection_activate is True:
             x_temp = self.projection_operator(x_temp, self.args)
-            y_temp = self.projection_operator(y_temp, self.args)
+            y_temp = self.projection_operator(y_temp, self.args)'''
         
         x_new = x_k - gamma * self.grad_f_x(x_temp, y_temp, self.args)
         y_new = y_k + gamma * self.grad_f_y(y_temp, y_temp, self.args)
@@ -80,6 +80,8 @@ class VariatonalOptimizer:
         if self.projection_activate is True:
             x_new = self.projection_operator(x_new, self.args)
             y_new = self.projection_operator(y_new, self.args)
+            x_temp = self.projection_operator(x_temp, self.args)
+            y_temp = self.projection_operator(y_temp, self.args)
 
         return x_new, y_new, x_temp, y_temp
 
@@ -139,7 +141,6 @@ class VariatonalOptimizer:
                 
                 x_k = gamma_w_x_sum / gamma_sum
                 y_k = gamma_w_y_sum / gamma_sum
-
             else:
                 x_k, y_k = VariatonalOptimizer.gd_step(self, x_k, y_k, k)
                 gradient_calls += 1
