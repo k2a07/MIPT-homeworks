@@ -8,6 +8,8 @@ import time
 from sklearn.metrics import mean_squared_error, accuracy_score
 from tqdm import tqdm
 
+#---HW8-------------------------------------------------------------------------------------------------
+
 class VariatonalOptimizer:
     '''
     Class of Optimization Methods for Variatonal Inequality Problems
@@ -159,6 +161,8 @@ class VariatonalOptimizer:
                 AssertionError
         return points_arr, differences_arr, gradient_calls_arr
 
+#---HW1-7-------------------------------------------------------------------------------------------------
+
 class GradientOptimizer:
     '''
     Class of Gradient Methods Optimizers for regular optimization problems
@@ -170,7 +174,8 @@ class GradientOptimizer:
                  diana_activate = False, acc_k = None, upper_limit = 1e10, ef21_activate = False, marina_activate = False,
                  p_marina = 0.5, momentum_gd_activate = False, nesterov_momentum_activate = False, momentum_coeff_k = 0,
                  restart_activate = False, noisy_gradient_activate = False, ksi_sigma = 10, sgd_activate = False, 
-                 batch_size = 1, svrg_activate = False, sarah_activate = False,):
+                 batch_size = 1, saga_activate = False, svrg_activate = False, p_svrg = 0.5, sarah_activate = False, p_sarah = 0.5,
+                 proj_activate = False, proj_func = None, prox_activate = False, prox_func = None):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
@@ -183,15 +188,32 @@ class GradientOptimizer:
         :parameter criterium: criterium of convergence, options: '||x_k - x^*||', '|f(x_k) - f(x^*)|', '||grad_f(x_k)||'
         :parameter y_lim: target difference from x_k and x^*
         :parameter x_true: true optimum
+        :parameter grad_f_j: the j-th coordinate of a gradient  
+        :parameter proj_activate: activate projection operator
+        :parameter proj_func: projection operator
+        :parameter prox_activate: activate proximal operator
+        :parameter prox_func: proximal operator
+        HW3
+        :parameter momentum_gd_activate: activate momentum gradient descent
+        :parameter nesterov_momentum_activate: activate nesterov momentum algorithm
+        :parameter momentum_coeff_k: the coefficient in front of the momentum 
+        :parameter restart_activate: activate restart method in accelerated method
+        HW5
+        :parameter noisy_gradient_activate: activate noisy gradient method
+        :parameter ksi_sigma: sqrt(variance of ksi) in noisy gradient method
         :parameter sgd_activate: activate sgd
         :parameter batch_size: number of batches (by default equals to 1)
+        :parameter saga_activate = activate saga
         :parameter svrg_activate: activate svrg
+        :parameter p_svrg: probability in svrg method
         :parameter sarah_activate: activate sarah
+        :parameter p_sarah: probability in sarah method
+        HW6
         :parameter csgd_activate: activate csgd
         :parameter is_independent: use the independent coordinates in csgd if True
-        :parameter grad_f_j: the j-th coordinate of a gradient        
         :parameter n_coord: the number of coordinates left in the csgd
         :parameter sega_activate: activate sega
+        HW7
         :parameter n_workers: number of workers in distributed optimization
         :parameter top_k_activate: activate top_k compressor
         :parameter rand_k_activate: activate rand_k compressor
@@ -202,14 +224,6 @@ class GradientOptimizer:
         :parameter ef21_activate: activate ef21
         :parameter marina_activate: activate marina
         :parameter p_marina: probability of transmitting the whole gradient (not compressed one)
-        HW3
-        :parameter momentum_gd_activate: activate momentum gradient descent
-        :parameter nesterov_momentum_activate: activate nesterov momentum algorithm
-        :parameter momentum_coeff_k: the coefficient in front of the momentum 
-        :parameter restart_activate: activate restart method in accelerated method
-        HW5
-        :parameter noisy_gradient_activate: activate noisy gradient method
-        :parameter ksi_sigma: sqrt(variance of ksi) in noisy gradient method
         '''
         self.f = f
         self.grad_f = grad_f
@@ -226,6 +240,10 @@ class GradientOptimizer:
         self.is_independent = is_independent
         self.n_coord = n_coord
         self.sega_activate = sega_activate
+        self.proj_activate = proj_activate
+        self.proj_func = proj_func
+        self.prox_activate = prox_activate
+        self.prox_func = prox_func
         #HW3
         self.momentum_gd_activate = momentum_gd_activate
         self.nesterov_momentum_activate = nesterov_momentum_activate
@@ -236,8 +254,11 @@ class GradientOptimizer:
         self.ksi_sigma = ksi_sigma
         self.batch_size = batch_size
         self.sgd_activate = sgd_activate
+        self.saga_activate = saga_activate
         self.svrg_activate = svrg_activate
+        self.p_svrg = p_svrg
         self.sarah_activate = sarah_activate
+        self.p_sarah = p_sarah
         #HW7
         self.n_workers = n_workers
         self.top_k_activate = top_k_activate
@@ -317,7 +338,6 @@ class GradientOptimizer:
             grad = self.grad_f(x_k, self.args)
             return x_k - gamma * grad
 
-    
     #---HW3----------------------------------------------------------------------------------------
 
     def momentum_gd_step(self, x_k, k, x_prev):
@@ -376,9 +396,56 @@ class GradientOptimizer:
         '''
         gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
         
-        j = np.random.randint(len(x_k))
+        j = np.random.randint(0, self.args['n'])
         
-        return x_k - 1/len(x_k) * gamma * (self.grad_f_j(x_k, j, self.args))
+        return x_k - gamma * self.grad_f_j(x_k, j, self.args)
+    
+    def saga_step(self, x_k, phi_k, k):
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+
+        j = np.random.randint(0, self.args['n'])
+        phi_j_new = x_k
+
+        g_additional = np.zeros_like(x_k)
+        for i in range(self.args['n']):
+            g_additional += self.grad_f_j(phi_k[i], i, self.args)
+        g_additional /= self.args['n']
+
+        g_k = self.grad_f_j(phi_j_new, j, self.args) - self.grad_f_j(phi_k[j], j, self.args) + g_additional
+
+        phi_k[j] = phi_j_new
+
+        return x_k - gamma * g_k, phi_k
+    
+    def svrg_step(self, x_k, w_k, g_k, k):
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        i = np.random.randint(0, self.args['n'])
+
+        g = self.grad_f_j(x_k, i, self.args) - self.grad_f_j(w_k, i, self.args) + g_k
+
+        x_k = x_k - gamma * g
+
+        p = np.random.random()
+        if self.p_svrg >= p:
+            w_k = x_k
+            g_k = self.grad_f(x_k, self.args)
+        
+        return x_k, w_k, g_k        
+    
+    def sarah_step(self, x_k, x_old, g_k, k):
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        
+        j = np.random.randint(0, self.args['n'])
+
+        p = np.random.random()
+        if self.p_sarah >= p:
+            g_k = self.grad_f_j(x_k, j, self.args) - self.grad_f_j(x_old, j, self.args) + g_k
+        else:
+            g_k = self.grad_f(x_k, self.args)
+
+        x_k = x_k - gamma * g_k
+
+        return x_k, g_k
     
     #---HW6----------------------------------------------------------------------------------------
     
@@ -419,7 +486,7 @@ class GradientOptimizer:
         h_k_new = h_k + e_j * (grad_j - h_k[j])
         
         return x_k - gamma*g_k, h_k_new
-    
+        
     #---HW7----------------------------------------------------------------------------------------
     
     def diana_step(self, x_k, k, h_list):
@@ -564,7 +631,12 @@ class GradientOptimizer:
         g_k = np.sum(grad_list, axis = 0) / len(grad_list)      #for marina step
         y_k = np.copy(self.x_0) #for restart
         theta_k = 1             #for restart
-        
+
+        phi_k = [np.copy(self.x_0) for i in range(self.args['n'])] #for saga
+        w_k = np.copy(self.x_0) #for svrg
+        g_k_stoch = self.grad_f(self.x_0, self.args) #for svrg and sarah  
+        x_old = x_k #for sarah     
+
         t_start = time.time()
         
         times_arr = []
@@ -575,6 +647,14 @@ class GradientOptimizer:
         for k in tqdm(range(self.n_iter)):     
             if self.sgd_activate is True:
                 x_k = GradientOptimizer.sgd_step(self, x_k, k)
+            elif self.saga_activate is True:
+                x_k, phi_k = GradientOptimizer.saga_step(self, x_k, phi_k, k)
+            elif self.svrg_activate is True:
+                x_k, w_k, g_k_stoch = GradientOptimizer.svrg_step(self, x_k, w_k, g_k_stoch, k)
+            elif self.sarah_activate is True:
+                 x_new, g_k_stoch = GradientOptimizer.sarah_step(self, x_k, x_old, g_k_stoch, k)
+                 x_old = x_k
+                 x_k = x_new
             elif self.csgd_activate is True:
                 x_k = GradientOptimizer.csgd_step(self, x_k, k)
             elif self.sega_activate is True:
@@ -597,13 +677,17 @@ class GradientOptimizer:
                 x_k = GradientOptimizer.noisy_gradient_step(self, x_k, k)
             else:
                 x_k = GradientOptimizer.gd_step(self, x_k, k)
+
+            if self.proj_activate is True:
+                x_k = self.proj_func(x_k, k, self.args)
+            elif self.prox_activate is True:
+                x_k = self.prox_func(x_k, k, self.args)
                 
             points_arr.append(x_k)
 
             if self.acc_k is not None:
                 acc_arr.append(self.acc_k(k, self.f, self.grad_f, x_k, self.x_true, self.args))
 
-            t_stop = time.time()
             if self.criterium == '||x_k - x^*||':
                 differences_arr.append(norm(x_k - self.x_true, ord = 2))
             elif self.criterium == '|f(x_k) - f(x^*)|':
@@ -665,31 +749,6 @@ def f_quad_grad(x, args):
 def f_quad_grad_j(x, j, args):
     return args['A'][j] @ x - args['b'][j]    
 
-#HW 5?
-def SAGA(n_iter, lr, R, f_arr, nodes_count, x_0):
-    arr_n = [i for i in range(nodes_count)]
-    phi = [x_0]*nodes_count
-    points = []
-    x_old = x_0
-    
-    for k in range(n_iter):
-        avg_grad = 0
-        for i in range(nodes_count):
-            np.sum(get_grad(f_arr[i], phi[i]))
-        avg_grad /= nodes_count
-        
-        j = np.random.randint(nodes_count)
-        phi_j_old = phi[j]
-        phi[j] = x_old
-             
-        #g = get_autograd(f_arr[j], phi[j]) - get_autograd(f_arr[j], phi_j_old) + avg_grad
-        
-        x_new = prox_l2(x_old - lr*g, lr)
-        x_old = x_new
-
-
-def SVRG(n_iter, A, lr, b, x_0):
-    pass    
 '''
 def criteria_points(A, b, points, x_true = None, criteria_type = "||x - x*||"):
     diff_arr = []
