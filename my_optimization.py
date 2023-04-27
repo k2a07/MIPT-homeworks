@@ -476,15 +476,18 @@ class GradientOptimizer:
         '''
         gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
 
-        e_j = np.zeros(len(x_k)) 
-        j = np.random.randint(self.args['d'])
-        e_j[j] = 1
+        g_k = h_k 
+        h_k_new = h_k
+        j_list = [np.random.randint(self.args['d']) for i in range(self.n_coord)]
+        for j in j_list:
+            e_j = np.zeros(len(x_k))
+            e_j[j] = 1
 
-        grad_j = self.grad_f_j(x_k, j, self.args).real
-        
-        g_k = self.args['d'] * e_j * (grad_j - h_k[j]) + h_k
-        h_k_new = h_k + e_j * (grad_j - h_k[j])
-        
+            grad_j = self.grad_f_j(x_k, j, self.args).real
+
+            h_k_new += e_j * (grad_j - h_k[j])
+            g_k += self.args['d'] * e_j * (grad_j - h_k[j])
+
         return x_k - gamma*g_k, h_k_new
         
     #---HW7----------------------------------------------------------------------------------------
@@ -636,6 +639,7 @@ class GradientOptimizer:
         w_k = np.copy(self.x_0) #for svrg
         g_k_stoch = self.grad_f(self.x_0, self.args) #for svrg and sarah  
         x_old = x_k #for sarah     
+        h_k_sega = np.zeros_like(self.grad_f(self.x_0, self.args))#for sega
 
         t_start = time.time()
         
@@ -658,7 +662,7 @@ class GradientOptimizer:
             elif self.csgd_activate is True:
                 x_k = GradientOptimizer.csgd_step(self, x_k, k)
             elif self.sega_activate is True:
-                x_k = GradientOptimizer.sega_step(self, x_k, h_k, k)
+                x_k, h_k_sega = GradientOptimizer.sega_step(self, x_k, h_k_sega, k)
             elif self.ef_activate is True:
                 x_k, errors_list = GradientOptimizer.ef_gd_step(self, x_k, k, errors_list)
             elif self.diana_activate is True:
