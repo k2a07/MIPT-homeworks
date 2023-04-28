@@ -175,7 +175,8 @@ class GradientOptimizer:
                  p_marina = 0.5, momentum_gd_activate = False, nesterov_momentum_activate = False, momentum_coeff_k = 0,
                  restart_activate = False, noisy_gradient_activate = False, ksi_sigma = 10, sgd_activate = False, 
                  batch_size = 1, saga_activate = False, svrg_activate = False, p_svrg = 0.5, sarah_activate = False, p_sarah = 0.5,
-                 proj_activate = False, proj_func = None, prox_activate = False, prox_func = None):
+                 proj_activate = False, proj_func = None, prox_activate = False, prox_func = None, frank_wolfe_activate = False,
+                 mirror_descent_activate = False, accelerated_fw_activate = False):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
@@ -185,7 +186,7 @@ class GradientOptimizer:
         :parameter n_iter: number of iterations
         :parameter n: number of workers (functions to optimize)
         :parameter args: includes parameters of functions
-        :parameter criterium: criterium of convergence, options: '||x_k - x^*||', '|f(x_k) - f(x^*)|', '||grad_f(x_k)||'
+        :parameter criterium: criterium of convergence, options: '||x_k - x^*||', '|f(x_k) - f(x^*)|', '||grad_f(x_k)||', 'gap'
         :parameter y_lim: target difference from x_k and x^*
         :parameter x_true: true optimum
         :parameter grad_f_j: the j-th coordinate of a gradient  
@@ -198,6 +199,10 @@ class GradientOptimizer:
         :parameter nesterov_momentum_activate: activate nesterov momentum algorithm
         :parameter momentum_coeff_k: the coefficient in front of the momentum 
         :parameter restart_activate: activate restart method in accelerated method
+        HW4
+        :parameter frank_wolfe_activate: activate frank_wolfe
+        :parameter mirror_descent_activate: activate mirror_descent
+        :parameter accelerated_fw_activate: activate accelerated frank wolfe algorithm
         HW5
         :parameter noisy_gradient_activate: activate noisy gradient method
         :parameter ksi_sigma: sqrt(variance of ksi) in noisy gradient method
@@ -249,6 +254,10 @@ class GradientOptimizer:
         self.nesterov_momentum_activate = nesterov_momentum_activate
         self.momentum_coeff_k = momentum_coeff_k
         self.restart_activate = restart_activate
+        #HW4
+        self.frank_wolfe_activate = frank_wolfe_activate
+        self.mirror_descent_activate = mirror_descent_activate
+        self.accelerated_fw_activate = accelerated_fw_activate
         #HW5
         self.noisy_gradient_activate = noisy_gradient_activate
         self.ksi_sigma = ksi_sigma
@@ -377,6 +386,36 @@ class GradientOptimizer:
         return x_new, y_new, theta_new
     
     #---HW4----------------------------------------------------------------------------------------
+
+    def frank_wolfe_step(self, x_k, k):
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+
+        #note: this works for probabilistic simplex. Generally s = argmin_s<grad_f, s - x_k>
+        s = np.zeros(len(x_k))
+        s[np.argmin(self.grad_f(x_k, self.args))] = 1
+
+        return x_k + gamma * (s - x_k)
+
+    def mirror_descent_step(self, x_k, k):
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        #Note: only for simplex
+        return x_k * np.exp(- gamma * self.grad_f(x_k, self.args)) /(x_k @ np.exp(- gamma * self.grad_f(x_k, self.args)))
+
+    def accelerated_fw_step(self, x_k, k):
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        '''
+        #y_0 = x_0
+    
+        #p_0 \in X, \delta_0 > 0: f(p_0) - f(x*) \leq \delta_0
+        for s = 1, 2, ... 
+            x_0 = p_{s - 1}, N = [2*np.sqrt(6 * self.args['L'] / self.args['mu'])]
+            CSG: beta_k = 2 * self.args['L']/k, eta_k = 8 * self.args['L'] * delta_0 * 2**(-s) / (self.args['mu'] * N * k)
+            output: plot_graphs
+        
+        CSG:
+        for 
+        '''
+    
 
     #---HW5----------------------------------------------------------------------------------------
     
@@ -679,6 +718,12 @@ class GradientOptimizer:
                 x_k, y_k, theta_k = GradientOptimizer.restart_step(self, x_k, k, y_k, theta_k)
             elif self.noisy_gradient_activate is True:
                 x_k = GradientOptimizer.noisy_gradient_step(self, x_k, k)
+            elif self.frank_wolfe_activate is True:
+                x_k = GradientOptimizer.frank_wolfe_step(self, x_k, k)
+            elif self.mirror_descent_activate is True:
+                x_k = GradientOptimizer.mirror_descent_step(self, x_k, k)
+            elif self.accelerated_fw_activate is True:
+                x_k = GradientOptimizer.accelerated_fw_step(self, x_k, k)
             else:
                 x_k = GradientOptimizer.gd_step(self, x_k, k)
 
@@ -698,6 +743,8 @@ class GradientOptimizer:
                 differences_arr.append(self.f(x_k, self.args) - self.f(self.x_true, self.args))
             elif self.criterium == '||grad_f(x_k)||':
                 differences_arr.append(norm(self.grad_f(x_k, self.args), ord = 2))
+            elif self.criterium == 'gap':
+                differences_arr.append(self.grad_f(x_k, self.args) @ x_k - np.min(self.grad_f(x_k, self.args)))
             else:
                 AssertionError
                 
@@ -732,14 +779,13 @@ def plot_graphs(x, y, x_label, lines_labels, title, logscale = False, specific_s
     plt.title(title)
     plt.legend()
     plt.show()    
-    
-        
+         
 #Matrix Generation                
 def gen_A(d, mu, L):
-    #U = ortho_group.rvs(dim = d)
+    U = ortho_group.rvs(dim = d)
     A = mu * np.eye(d)
     A[0][0] = L
-    #A = U.T @ A @ U
+    A = U.T @ A @ U
 
     return A
 
@@ -813,10 +859,8 @@ def Grad_Descent_LogReg(n_iter, X, lr, y, w_0, n):
         w_new = w_old - lr*grad
         w_old = w_new 
         points.append(w_old)
-    return points
-             
+    return points            
             
-#---------------------------------------------HW 4-----------------------------------------------------
 def mirror_descent(d, n_iter, X):
     x = np.array([1 / d for _ in range(d)])
     crit_arr = []
@@ -836,60 +880,3 @@ def to_diff(t1, t2):
     delta = t2 - t1
     diff_in_seconds = delta.total_seconds()
     return diff_in_seconds
-
-def frank_wolfe(d, n_iter, X):
-    x = np.array([1 / d for _ in range(d)])
-
-    crit_arr = []
-    times = []
-    t_0 = dt.now()
-
-    for k in range(n_iter):
-        s = np.zeros(d)
-        s[np.argmin(A @ x)] = 1
-        x = x + 2 / (k + 2) * (s - x)
-
-        crit_arr.append(gap_criteria(x, X))
-        times.append(to_diff(t_0, dt.now()))
-
-    return crit_arr, times
-
-'''
-#------------------------------------------from HW3 version 1
-def Momentum_Grad_Descent(n_iter, X, lr, gamma, y, w_0, n):
-    points = []
-    w_old = w_0
-    for i in range(n_iter):
-        grad = Get_grad (X, y, w_old, n)
-        if i < 2:
-            w_new = w_old - lr*grad 
-        else:
-            w_new = w_old - lr*grad - gamma*(points[i] - points[i - 1])
-        w_old = w_new 
-        points.append(w_old)
-    return points
-
-def Momentum_Draw_Graph (n_iter, X, lr, gamma, y, w_0, n, w_true, criteria): 
-    points = Momentum_Grad_Descent(n_iter, X, lr, gamma, y, w_0, n)
-    diff_arr, crit_arr, x = [], [], []
-
-    for i in range(n_iter):
-        x.append(i + 1)
-        diff_arr.append(points[i] - w_true)
-        if criteria == "x_criteria":
-            crit_arr.append(np.linalg.norm(diff_arr[i]))
-        elif criteria == "f_criteria":
-            crit_arr.append(np.abs(Logloss(X, y, points[i], n) - Logloss(X, y, w_true, n)))
-
-    y = crit_arr
-    if criteria == "x_criteria":
-        plt.plot(x, y, label = "||w^k - w*||")
-    elif criteria == "f_criteria":
-        plt.plot(x, y, label = "|f(w^k) - f(w*)|")
-
-    plt.xlabel('n_iter')
-    plt.ylabel('criteria')
-    plt.title('Standard axis convergence')
-    plt.legend()
-    plt.show()
-'''
