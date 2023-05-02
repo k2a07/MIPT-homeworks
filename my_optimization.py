@@ -424,7 +424,7 @@ class GradientOptimizer:
             eta_ksN = eta(k, s, N)
 
             z_k = (1 - gamma_k) * y_k + gamma_k * x_k
-            x_k = GradientOptimizer.CndG(self.args['A'] @ z_k, x_k, beta_k, eta_ksN)
+            x_k = GradientOptimizer.CndG(self.grad_f(z_k, self.args), x_k, beta_k, eta_ksN)
             y_k = (1 - gamma_k) * y_k + gamma_k * x_k
     
         return y_k
