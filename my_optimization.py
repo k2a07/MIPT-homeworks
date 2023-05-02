@@ -401,21 +401,51 @@ class GradientOptimizer:
         #Note: only for simplex
         return x_k * np.exp(- gamma * self.grad_f(x_k, self.args)) /(x_k @ np.exp(- gamma * self.grad_f(x_k, self.args)))
 
-    def accelerated_fw_step(self, x_k, k):
-        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
-        '''
-        #y_0 = x_0
+    def accelerated_fw_step(self, x_k, k):       
+        return GradientOptimizer.cgs(self, x_k, k)
+
+    def cgs(self, x_s, s):
+        x_k, y_k = x_s, x_s
+
+        N = int(2 * np.sqrt((6*self.args['L']) / self.args['mu'])) + 1
+
+        def gamma(k):
+            return 2 / (k + 2)
+
+        def beta(k):
+            return (2 * self.args['L']) / (k + 1)
+
+        def eta(k, s, N):
+            return (8 * self.args['L'] * self.args['delta0'] * (2**(-s - 1))) / (self.args['mu'] * N * (k + 1))
+         
+        for k in range(N):
+            gamma_k = gamma(k)
+            beta_k = beta(k)
+            eta_ksN = eta(k, s, N)
+
+            z_k = (1 - gamma_k) * y_k + gamma_k * x_k
+            x_k = GradientOptimizer.CndG(self.args['A'] @ z_k, x_k, beta_k, eta_ksN)
+            y_k = (1 - gamma_k) * y_k + gamma_k * x_k
     
-        #p_0 \in X, \delta_0 > 0: f(p_0) - f(x*) \leq \delta_0
-        for s = 1, 2, ... 
-            x_0 = p_{s - 1}, N = [2*np.sqrt(6 * self.args['L'] / self.args['mu'])]
-            CSG: beta_k = 2 * self.args['L']/k, eta_k = 8 * self.args['L'] * delta_0 * 2**(-s) / (self.args['mu'] * N * k)
-            output: plot_graphs
-        
-        CSG:
-        for 
-        '''
-    
+        return y_k
+
+    def CndG(gamma, u, beta, eta):
+        ut = np.array(u)
+        vt = GradientOptimizer.max_simplex(gamma, beta, ut, u)
+        V = (gamma + beta * (ut - u)) @ (ut - vt)
+        while V > eta:
+            temp = ((beta * (u - ut) - gamma)@(vt - ut))/(beta * ((np.linalg.norm(vt - ut))**2))
+            alphat = min(1, temp)
+            ut = (1 - alphat) * ut + alphat * vt
+            vt = GradientOptimizer.max_simplex(gamma, beta, ut, u)
+            V = (gamma + beta * (ut - u)) @ (ut - vt)
+        return ut
+
+    def max_simplex(gamma, beta, ut, u):
+        vector = gamma + beta * (ut - u)
+        x = np.zeros(len(vector))
+        x[np.argmin(vector)] = 1
+        return x
 
     #---HW5----------------------------------------------------------------------------------------
     
