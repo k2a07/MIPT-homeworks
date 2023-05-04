@@ -176,7 +176,8 @@ class GradientOptimizer:
                  restart_activate = False, noisy_gradient_activate = False, ksi_sigma = 10, sgd_activate = False, 
                  batch_size = 1, saga_activate = False, svrg_activate = False, p_svrg = 0.5, sarah_activate = False, p_sarah = 0.5,
                  proj_activate = False, proj_func = None, prox_activate = False, prox_func = None, frank_wolfe_activate = False,
-                 mirror_descent_activate = False, accelerated_fw_activate = False):
+                 mirror_descent_activate = False, accelerated_fw_activate = False, server_ef_activate = False,
+                 master_rand_k_activate = False):
         '''
         :parameter f: target function
         :parameter grad_f: target function gradient
@@ -229,6 +230,8 @@ class GradientOptimizer:
         :parameter ef21_activate: activate ef21
         :parameter marina_activate: activate marina
         :parameter p_marina: probability of transmitting the whole gradient (not compressed one)
+        :parameter server_ef_activate: activate error feedback on the server
+        :parameter master_rand_k_activate: the compressor on the master is done by rand_k if true, else by top_k
         '''
         self.f = f
         self.grad_f = grad_f
@@ -281,6 +284,8 @@ class GradientOptimizer:
         self.ef21_activate = ef21_activate
         self.marina_activate = marina_activate
         self.p_marina = p_marina
+        self.server_ef_activate = server_ef_activate
+        self.master_rand_k_activate = master_rand_k_activate
 
     #---COMPRESSORS------------------------------------------------------------------------------------------
 
@@ -622,7 +627,7 @@ class GradientOptimizer:
             master_grad += displaced_grad_list[i]
         master_grad /= self.n_workers
 
-        return x_k - master_grad, errors_list
+        return x_k - master_grad, errors_list, displaced_grad_list
     
     def ef21_step(self, x_k, k, g_list):
         '''
@@ -691,14 +696,16 @@ class GradientOptimizer:
         h_k = grad_list
         errors_list = np.zeros_like(self.grad_f(x_k, self.args)) #for the ef_gd_step method
         h_list = grad_list                                        #for the diana_step 
-        g_list = []                   
+
         if self.ef21_activate is True:                           #for ef21 step
+            g_list = []   
             for i in range(self.n_workers):
                 if self.rand_k_activate is True:
                     g_i = GradientOptimizer.rand_k_compressor(self, grad_list[i])
                 else:
                     g_i = GradientOptimizer.top_k_compressor(self, grad_list[i])
                 g_list.append(g_i)
+            grad_list = g_list
 
         g_k = np.sum(grad_list, axis = 0) / len(grad_list)      #for marina step
         y_k = np.copy(self.x_0) #for restart
@@ -708,7 +715,9 @@ class GradientOptimizer:
         w_k = np.copy(self.x_0) #for svrg
         g_k_stoch = self.grad_f(self.x_0, self.args) #for svrg and sarah  
         x_old = x_k #for sarah     
-        h_k_sega = np.zeros_like(self.grad_f(self.x_0, self.args))#for sega
+        h_k_sega = np.zeros_like(self.grad_f(self.x_0, self.args)) #for sega
+
+        server_error = np.zeros_like(self.x_0) #for server ef
 
         t_start = time.time()
         
@@ -733,11 +742,11 @@ class GradientOptimizer:
             elif self.sega_activate is True:
                 x_k, h_k_sega = GradientOptimizer.sega_step(self, x_k, h_k_sega, k)
             elif self.ef_activate is True:
-                x_k, errors_list = GradientOptimizer.ef_gd_step(self, x_k, k, errors_list)
+                x_k, errors_list, grad_list = GradientOptimizer.ef_gd_step(self, x_k, k, errors_list)
             elif self.diana_activate is True:
-                x_k, h_list = GradientOptimizer.diana_step(self, x_k, k, h_list)
+                x_k, grad_list = GradientOptimizer.diana_step(self, x_k, k, grad_list)
             elif self.ef21_activate is True:
-                x_k, g_list = GradientOptimizer.ef21_step(self, x_k, k, g_list)
+                x_k, grad_list = GradientOptimizer.ef21_step(self, x_k, k, grad_list)
             elif self.marina_activate is True:
                 x_k, g_k = GradientOptimizer.marina(self, x_k, k, self.p_marina, g_k)
             elif self.momentum_gd_activate is True:
@@ -757,11 +766,26 @@ class GradientOptimizer:
             else:
                 x_k = GradientOptimizer.gd_step(self, x_k, k)
 
+            if self.server_ef_activate is True: #Bonus 2 HW7
+                gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+                g_master, g_master_compressed = np.zeros_like(self.x_0), np.zeros_like(self.x_0)   
+                for i in range(self.n_workers):
+                    g_master += grad_list[i]
+                g_master /= self.n_workers
+
+                if self.master_rand_k_activate is True:
+                    g_master_compressed = GradientOptimizer.rand_k_compressor(self, server_error + gamma * g_master)
+                else:
+                    g_master_compressed = GradientOptimizer.top_k_compressor(self, server_error + gamma * g_master)
+                server_error = server_error + gamma * g_master - g_master_compressed
+
+                x_k = x_k - g_master_compressed
+
             if self.proj_activate is True:
                 x_k = self.proj_func(x_k, k, self.args)
             elif self.prox_activate is True:
                 x_k = self.prox_func(x_k, k, self.args)
-                
+
             points_arr.append(x_k)
 
             if self.acc_k is not None:
