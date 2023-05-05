@@ -7,6 +7,212 @@ from numpy.linalg import norm
 import time
 from sklearn.metrics import mean_squared_error, accuracy_score
 from tqdm import tqdm
+import scipy.optimize as spo
+
+#---HW9-------------------------------------------------------------------------------------------------
+
+class NewtonOptimizer:
+    '''
+    Class of Optimization Methods related to Newton's one
+    '''
+    def __init__(self, f, grad_f, x_0, gamma_k, args, n_iter = 5, criterium = '||x_k - x^*||', 
+                 y_lim = 1e-5, x_true = None, newton_activate = False, hessian_f = None,
+                 acc_k = None, upper_limit = 10**5, cubic_newton_activate = False, broyden_activate = False,
+                 dfp_activate = False, bfgs_activate = False, l_bfgs_activate = False):
+        #HW9
+        self.f = f
+        self.grad_f = grad_f
+        self.x_0 = x_0
+        self.gamma_k = gamma_k
+        self.args = args
+        self.n_iter = n_iter
+        self.criterium = criterium
+        self.y_lim = y_lim
+        self.x_true = x_true
+        self.newton_activate = newton_activate
+        self.hessian_f = hessian_f
+        self.acc_k = acc_k
+        self.upper_limit = upper_limit
+        self.cubic_newton_activate = cubic_newton_activate
+        self.broyden_activate = broyden_activate
+        self.dfp_activate = dfp_activate
+        self.bfgs_activate = bfgs_activate
+        self.l_bfgs_activate = l_bfgs_activate
+
+    def newton_step(self, x_k, k):
+        grad = self.grad_f(x_k, self.args)
+        hess = self.hessian_f(x_k, self.args)
+        
+        if len(x_k) == 1:
+            hess_inv = 1 / hess
+        else:
+            hess_inv = np.linalg.inv(hess)
+
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, hess_inv, self.args)
+
+        return x_k - gamma * hess_inv @ grad
+    
+    def cubic_newton_step(self, x_k, k):
+        grad = self.grad_f(x_k, self.args)
+        hess = self.hessian_f(x_k, self.args)
+        
+        '''if len(x_k) == 1:
+            hess_inv = 1 / hess
+        else:
+            hess_inv = np.linalg.inv(hess)'''
+
+        def phi(x):
+            return self.f(x_k, self.args) + grad @ (x - x_k) + \
+            1/2 * (x - x_k) @ (hess @ (x - x_k)) + \
+            self.args['M'] / 6 * norm(x_k - x, ord = 2)**3
+        
+        res = spo.minimize_scalar(phi)
+        return res.x
+    
+    def broyden_step(self, x_k, H_k, s_k, y_k, k):
+        #quasinewton: s_k = H_new @ y_k, where s_k = x_new - x_k, y_k = grad(x_k) - grad(x_new)
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        
+        q_k = s_k - H_k @ y_k
+        mu_k = 1 / (q_k.T @ y_k)
+
+        delta_H_k = mu_k * q_k @ q_k.T
+        H_k = H_k + delta_H_k
+        
+        return x_k - gamma * H_k @ self.grad_f(x_k, self.args), H_k, s_k, y_k
+
+    def dfp_step(self, x_k, H_k, s_k, y_k, k):
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+
+        mu_1 = 1 / (s_k.T @ y_k)
+        mu_2 = - 1 / ((H_k @ y_k).T @ y_k)
+
+        delta_H_k = mu_1 * s_k @ s_k.T + mu_2 * H_k @ y_k @ (H_k @ y_k).T
+        H_k = H_k + delta_H_k
+
+        return x_k - gamma * H_k @ self.grad_f(x_k, self.args), H_k, s_k, y_k
+    
+    def bfgs_step(self, x_k, H_k, s_k, y_k, alpha_k, k):
+        grad = self.grad_f(x_k, self.args)
+        p_k = - H_k @ grad
+
+        def find_alpha_k(alpha_k, x_k, p_k):
+            c_1 = 1e-4
+            c_2 = 0.9
+            alpha_k = 0.01
+            while self.f(x_k + alpha_k * p_k, self.args) <= self.f(x_k, self.args) + \
+                c_1 * alpha_k * self.grad_f(x_k, self.args).T @ p_k and + \
+                self.grad_f(x_k + alpha_k * p_k, self.args).T @ p_k >= c_2 * self.grad_f(x_k, self.args).T @ p_k:
+                alpha_k *= 1.5
+            return alpha_k
+        
+        alpha_k = find_alpha_k(alpha_k, x_k, p_k)
+
+        x_new = x_k + alpha_k * p_k
+        s_k = x_new - x_k
+        y_k = self.grad_f(x_new, self.args) - grad
+
+        rho_k = 1 / (y_k.T @ s_k)
+
+        I = np.eye(len(x_k))
+        H_new = (I - rho_k * s_k @ y_k.T) @ H_k @ (I - rho_k * y_k @ s_k.T) + rho_k * s_k @ s_k.T
+
+        return x_new, H_new, s_k, y_k, alpha_k
+    
+    def l_bfgs_step(self, x_k, H_k, H_0, s_k_arr, y_k_arr, k, m):
+        grad = self.grad_f(x_k, self.args)
+        d_k = - H_k @ grad
+
+        def find_alpha_k_l_bfgs(x_k, d_k):
+            beta_ = 1e-4
+            beta = 0.9
+            alpha_k = 1
+            while self.f(x_k + alpha_k * d_k, self.args) <= self.f(x_k, self.args) + \
+                beta_ * alpha_k * self.grad_f(x_k, self.args).T @ d_k and + \
+                self.grad_f(x_k + alpha_k * d_k, self.args).T @ d_k >= beta * self.grad_f(x_k, self.args).T @ beta:
+                alpha_k *= 1.5
+            return alpha_k
+        
+        alpha_k = find_alpha_k_l_bfgs(x_k, d_k)
+
+        H_new = np.zeros_like(H_k)
+        m_hat = min(k, m - 1)
+        for i in range(m_hat + 1):
+            pass#H_new = 
+
+    
+    def gd_step(self, x_k, k):
+        '''
+        Basic Gradient Descent step
+        '''
+        gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+        grad = self.grad_f(x_k, self.args)
+            
+        return x_k - gamma * grad
+    
+    def descent(self):
+        '''
+        This function realizes the descent to the optimum using one of the Newton-based methods
+        '''
+        x_k = np.copy(self.x_0) #for every method
+        #for quasi-newton methods
+        if  self.broyden_activate is True or self.dfp_activate is True or self.bfgs_activate is True:
+            H_k = np.copy(self.hessian_f(x_k, self.args))
+            grad = np.copy(self.grad_f(x_k, self.args))
+            #gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
+            gamma = 1
+            x_new = x_k - gamma * H_k @ grad
+            s_k = x_new - x_k
+            y_k = self.grad_f(x_new, self.args) - grad
+            alpha_k = 0.1 #for bfgs
+            alpha_k_bfgs = 1 #for l_bfgs
+        
+        t_start = time.time()
+        
+        times_arr = []
+        differences_arr = []
+        points_arr = []
+        acc_arr = []
+        
+        for k in tqdm(range(self.n_iter)):     
+            if self.newton_activate is True:
+                x_k = NewtonOptimizer.newton_step(self, x_k, k)
+            elif self.cubic_newton_activate is True:
+                x_k = NewtonOptimizer.cubic_newton_step(self, x_k, k)
+            elif self.broyden_activate is True:
+                x_k, H_k, s_k, y_k = NewtonOptimizer.broyden_step(self, x_k, H_k, s_k, y_k, k)
+            elif self.dfp_activate is True:
+                x_k, H_k, s_k, y_k = NewtonOptimizer.dfp_step(self, x_k, H_k, s_k, y_k, k)
+            elif self.bfgs_activate is True:
+                x_k, H_k, s_k, y_k, alpha_k = NewtonOptimizer.bfgs_step(self, x_k, H_k, s_k, y_k, alpha_k, k)
+            else:
+                x_k = NewtonOptimizer.gd_step(self, x_k, k)
+
+            points_arr.append(x_k)
+
+            if self.acc_k is not None:
+                acc_arr.append(self.acc_k(k, self.f, self.grad_f, x_k, self.x_true, self.args))
+
+            if self.criterium == '||x_k - x^*||':
+                differences_arr.append(norm(x_k - self.x_true, ord = 2))
+            elif self.criterium == '|f(x_k) - f(x^*)|':
+                differences_arr.append(self.f(x_k, self.args) - self.f(self.x_true, self.args))
+            elif self.criterium == '||grad_f(x_k)||':
+                differences_arr.append(norm(self.grad_f(x_k, self.args), ord = 2))
+            else:
+                AssertionError
+                
+            t_current = time.time()
+            times_arr.append(t_current - t_start)
+                   
+            if differences_arr[-1] <= self.y_lim:
+                break
+
+            if differences_arr[-1] >= self.upper_limit:
+                print("The upper limit was broken!")
+                break
+            
+        return points_arr, differences_arr, times_arr, acc_arr
 
 #---HW8-------------------------------------------------------------------------------------------------
 
@@ -604,7 +810,6 @@ class GradientOptimizer:
 
         return x_k - gamma * master_grad, h_list
     
-    
     def ef_gd_step(self, x_k, k, errors_list):
         '''
         Error Feedback Gradient Descent step
@@ -683,6 +888,7 @@ class GradientOptimizer:
         g_new /= self.n_workers
 
         return x_new, g_new
+
     
     #---DESCENT------------------------------------------------------------------------------------------
            
