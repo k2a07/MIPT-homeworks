@@ -127,8 +127,9 @@ class NewtonOptimizer:
             H_new = V_k_arr[i].T @ H_new @ V_k_arr[i]
         left, right = np.eye(len(x_k)), np.eye(len(x_k))
         for i in range(k, k - m_hat - 1, -1):
+            print(left.shape, s_k_arr[i].shape, (s_k_arr[i].T).shape, right.shape)
             H_new += rho_k_arr[i] * left @ s_k_arr[i] @ s_k_arr[i].T @ right
-
+        
             left = left @ V_k_arr[i].T
             right = V_k_arr[i] @ right
 
@@ -185,7 +186,7 @@ class NewtonOptimizer:
             s_k_arr = [x_new - x_k]
             y_k_arr = [self.grad_f(x_new, self.args) - grad]
             rho_k_arr = [1/(y_k_arr[-1].T @ s_k_arr[-1])]
-            V_k_arr = [np.eye(len(x_k)) - rho_k_arr[-1] @ y_k_arr[-1] @ s_k_arr[-1].T]
+            V_k_arr = [np.eye(len(x_k)) - rho_k_arr[-1] * y_k_arr[-1] @ s_k_arr[-1].T]
         
         t_start = time.time()
         
