@@ -71,7 +71,6 @@ class NewtonOptimizer:
         return res.x
     
     def broyden_step(self, x_k, H_k, s_k, y_k, k):
-        #quasinewton: s_k = H_new @ y_k, where s_k = x_new - x_k, y_k = grad(x_k) - grad(x_new)
         gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
         
         q_k = s_k - H_k @ y_k
