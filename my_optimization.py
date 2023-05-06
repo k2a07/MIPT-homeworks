@@ -18,7 +18,7 @@ class NewtonOptimizer:
     def __init__(self, f, grad_f, x_0, gamma_k, args, n_iter = 5, criterium = '||x_k - x^*||', 
                  y_lim = 1e-5, x_true = None, newton_activate = False, hessian_f = None,
                  acc_k = None, upper_limit = 10**5, cubic_newton_activate = False, broyden_activate = False,
-                 dfp_activate = False, bfgs_activate = False, l_bfgs_activate = False):
+                 dfp_activate = False, bfgs_activate = False, l_bfgs_activate = False, m_l_bfgs = 5):
         #HW9
         self.f = f
         self.grad_f = grad_f
@@ -38,6 +38,7 @@ class NewtonOptimizer:
         self.dfp_activate = dfp_activate
         self.bfgs_activate = bfgs_activate
         self.l_bfgs_activate = l_bfgs_activate
+        self.m_l_bfgs = m_l_bfgs
 
     def newton_step(self, x_k, k):
         grad = self.grad_f(x_k, self.args)
@@ -119,10 +120,19 @@ class NewtonOptimizer:
 
         return x_new, H_new, s_k, y_k, alpha_k
     
-    def l_bfgs_step(self, x_k, H_k, H_0, s_k_arr, y_k_arr, k, m):
-        grad = self.grad_f(x_k, self.args)
-        d_k = - H_k @ grad
+    def l_bfgs_step(self, x_k, H_0, s_k_arr, y_k_arr, rho_k_arr, V_k_arr, k, m):
+        m_hat = min(k, m - 1)
+        H_new = H_0
+        for i in range(k - m_hat, k + 1):
+            H_new = V_k_arr[i].T @ H_new @ V_k_arr[i]
+        left, right = np.eye(len(x_k)), np.eye(len(x_k))
+        for i in range(k, k - m_hat - 1, -1):
+            H_new += rho_k_arr[i] * left @ s_k_arr[i] @ s_k_arr[i].T @ right
 
+            left = left @ V_k_arr[i].T
+            right = V_k_arr[i] @ right
+
+        d_k = - H_new @ self.grad_f(x_k, self.args)
         def find_alpha_k_l_bfgs(x_k, d_k):
             beta_ = 1e-4
             beta = 0.9
@@ -134,13 +144,15 @@ class NewtonOptimizer:
             return alpha_k
         
         alpha_k = find_alpha_k_l_bfgs(x_k, d_k)
+        x_new = x_k + alpha_k * d_k
 
-        H_new = np.zeros_like(H_k)
-        m_hat = min(k, m - 1)
-        for i in range(m_hat + 1):
-            pass#H_new = 
+        s_k_arr.append(x_new - x_k)
+        y_k_arr.append(self.grad_f(x_new, self.args) - self.grad_f(x_k, self.args))
+        rho_k_arr.append(1/(y_k_arr[-1].T @ s_k_arr[-1]))
+        V_k_arr.append(np.eye(len(x_k)) - rho_k_arr[-1] @ y_k_arr[-1] @ s_k_arr[-1].T)
 
-    
+        return x_new, s_k_arr, y_k_arr, rho_k_arr, V_k_arr
+
     def gd_step(self, x_k, k):
         '''
         Basic Gradient Descent step
@@ -154,18 +166,26 @@ class NewtonOptimizer:
         '''
         This function realizes the descent to the optimum using one of the Newton-based methods
         '''
-        x_k = np.copy(self.x_0) #for every method
+        #for every method
+        x_k = np.copy(self.x_0) 
+        grad = np.copy(self.grad_f(x_k, self.args))
         #for quasi-newton methods
         if  self.broyden_activate is True or self.dfp_activate is True or self.bfgs_activate is True:
             H_k = np.copy(self.hessian_f(x_k, self.args))
-            grad = np.copy(self.grad_f(x_k, self.args))
             #gamma = self.gamma_k(k, self.f, self.grad_f, x_k, self.x_true, self.args)
             gamma = 1
             x_new = x_k - gamma * H_k @ grad
             s_k = x_new - x_k
             y_k = self.grad_f(x_new, self.args) - grad
             alpha_k = 0.1 #for bfgs
-            alpha_k_bfgs = 1 #for l_bfgs
+        if self.l_bfgs_activate is True: #for l_bfgs
+            H_0 = np.copy(self.hessian_f(x_k, self.args))
+            gamma = 1
+            x_new = x_k - gamma * H_0 @ grad
+            s_k_arr = [x_new - x_k]
+            y_k_arr = [self.grad_f(x_new, self.args) - grad]
+            rho_k_arr = [1/(y_k_arr[-1].T @ s_k_arr[-1])]
+            V_k_arr = [np.eye(len(x_k)) - rho_k_arr[-1] @ y_k_arr[-1] @ s_k_arr[-1].T]
         
         t_start = time.time()
         
@@ -185,6 +205,8 @@ class NewtonOptimizer:
                 x_k, H_k, s_k, y_k = NewtonOptimizer.dfp_step(self, x_k, H_k, s_k, y_k, k)
             elif self.bfgs_activate is True:
                 x_k, H_k, s_k, y_k, alpha_k = NewtonOptimizer.bfgs_step(self, x_k, H_k, s_k, y_k, alpha_k, k)
+            elif self.l_bfgs_activate is True:
+                x_new, s_k_arr, y_k_arr, rho_k_arr, V_k_arr = NewtonOptimizer.l_bfgs_step(self, x_k, H_0, s_k_arr, y_k_arr, rho_k_arr, V_k_arr, k, self.m_l_bfgs)
             else:
                 x_k = NewtonOptimizer.gd_step(self, x_k, k)
 
