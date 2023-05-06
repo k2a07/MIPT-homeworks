@@ -76,7 +76,7 @@ class NewtonOptimizer:
         q_k = s_k - H_k @ y_k
         mu_k = 1 / (q_k.T @ y_k)
 
-        delta_H_k = mu_k * q_k @ q_k.T
+        delta_H_k = mu_k * (q_k.reshape(-1, 1)) @ (q_k.reshape(1, -1))
         H_k = H_k + delta_H_k
         
         return x_k - gamma * H_k @ self.grad_f(x_k, self.args), H_k, s_k, y_k
@@ -87,7 +87,9 @@ class NewtonOptimizer:
         mu_1 = 1 / (s_k.T @ y_k)
         mu_2 = - 1 / ((H_k @ y_k).T @ y_k)
 
-        delta_H_k = mu_1 * s_k @ s_k.T + mu_2 * H_k @ y_k @ (H_k @ y_k).T
+        delta_H_k = mu_1 * (s_k.reshape(-1, 1)) @ (s_k.reshape(1, -1)) + \
+            mu_2 * ((H_k @ y_k).reshape(-1, 1)) @ ((H_k @ y_k).reshape(1, -1))
+        
         H_k = H_k + delta_H_k
 
         return x_k - gamma * H_k @ self.grad_f(x_k, self.args), H_k, s_k, y_k
@@ -115,7 +117,9 @@ class NewtonOptimizer:
         rho_k = 1 / (y_k.T @ s_k)
 
         I = np.eye(len(x_k))
-        H_new = (I - rho_k * s_k @ y_k.T) @ H_k @ (I - rho_k * y_k @ s_k.T) + rho_k * s_k @ s_k.T
+        H_new = (I - rho_k * s_k.reshape(-1, 1) @ y_k.reshape(1, -1)) @ H_k @ \
+            (I - rho_k * y_k.reshape(-1, 1) @ s_k.reshape(1, -1)) + \
+                rho_k * s_k.reshape(-1, 1) @ s_k.reshape(1, -1)
 
         return x_new, H_new, s_k, y_k, alpha_k
     
@@ -126,20 +130,21 @@ class NewtonOptimizer:
             H_new = V_k_arr[i].T @ H_new @ V_k_arr[i]
         left, right = np.eye(len(x_k)), np.eye(len(x_k))
         for i in range(k, k - m_hat - 1, -1):
-            H_new += (((left @ s_k_arr[i].reshape(-1,1)) @ (s_k_arr[i].reshape(1,-1))) @ right)
+            H_new += rho_k_arr[i] * left @ s_k_arr[i].reshape(-1,1) @ s_k_arr[i].reshape(1,-1) @ right
         
             left = left @ V_k_arr[i].T
             right = V_k_arr[i] @ right
-
+        
         d_k = - H_new @ self.grad_f(x_k, self.args)
+        
         def find_alpha_k_l_bfgs(x_k, d_k):
             beta_ = 1e-4
             beta = 0.9
-            alpha_k = 0.1
+            alpha_k = 1
             while self.f(x_k + alpha_k * d_k, self.args) <= self.f(x_k, self.args) + \
                 beta_ * alpha_k * self.grad_f(x_k, self.args).T @ d_k and + \
-                self.grad_f(x_k + alpha_k * d_k, self.args).T @ d_k >= beta * self.grad_f(x_k, self.args).T @ beta:
-                alpha_k *= 1.5
+                self.grad_f(x_k + alpha_k * d_k, self.args).T @ d_k >= beta * self.grad_f(x_k, self.args).T @ d_k:
+                alpha_k *= 1.2
             return alpha_k
         
         alpha_k = find_alpha_k_l_bfgs(x_k, d_k)
@@ -148,7 +153,8 @@ class NewtonOptimizer:
         s_k_arr.append(x_new - x_k)
         y_k_arr.append(self.grad_f(x_new, self.args) - self.grad_f(x_k, self.args))
         rho_k_arr.append(1/(y_k_arr[-1].T @ s_k_arr[-1]))
-        V_k_arr.append(np.eye(len(x_k)) - rho_k_arr[-1] * y_k_arr[-1] @ s_k_arr[-1].T)
+        V_k_arr.append(np.eye(len(x_k)) - rho_k_arr[-1] * y_k_arr[-1].reshape(-1, 1) @ \
+                       s_k_arr[-1].reshape(1, -1))
 
         return x_new, s_k_arr, y_k_arr, rho_k_arr, V_k_arr
 
@@ -184,7 +190,8 @@ class NewtonOptimizer:
             s_k_arr = [np.array(x_new - x_k)]
             y_k_arr = [np.array(self.grad_f(x_new, self.args) - grad)]
             rho_k_arr = [1/(y_k_arr[-1].T @ s_k_arr[-1])]
-            V_k_arr = [np.eye(len(x_k)) - rho_k_arr[-1] * y_k_arr[-1] @ s_k_arr[-1].T]
+            V_k_arr = [np.eye(len(x_k)) - rho_k_arr[-1] * y_k_arr[-1].reshape(-1, 1) @ \
+                       s_k_arr[-1].reshape(1, -1)]
         
         t_start = time.time()
         
