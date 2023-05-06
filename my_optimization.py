@@ -125,7 +125,7 @@ class NewtonOptimizer:
     
     def l_bfgs_step(self, x_k, H_0, s_k_arr, y_k_arr, rho_k_arr, V_k_arr, k, m):
         m_hat = min(k, m - 1)
-        H_new = H_0
+        H_new = np.copy(H_0) #np.zeros_like(H_0)
         for i in range(k - m_hat, k + 1):
             H_new = V_k_arr[i].T @ H_new @ V_k_arr[i]
         left, right = np.eye(len(x_k)), np.eye(len(x_k))
@@ -134,17 +134,18 @@ class NewtonOptimizer:
         
             left = left @ V_k_arr[i].T
             right = V_k_arr[i] @ right
+        #H_new += left @ H_0 @ right
         
         d_k = - H_new @ self.grad_f(x_k, self.args)
         
         def find_alpha_k_l_bfgs(x_k, d_k):
             beta_ = 1e-4
             beta = 0.9
-            alpha_k = 1
+            alpha_k = 0.1
             while self.f(x_k + alpha_k * d_k, self.args) <= self.f(x_k, self.args) + \
                 beta_ * alpha_k * self.grad_f(x_k, self.args).T @ d_k and + \
                 self.grad_f(x_k + alpha_k * d_k, self.args).T @ d_k >= beta * self.grad_f(x_k, self.args).T @ d_k:
-                alpha_k *= 1.2
+                alpha_k *= 1.5
             return alpha_k
         
         alpha_k = find_alpha_k_l_bfgs(x_k, d_k)
@@ -212,7 +213,7 @@ class NewtonOptimizer:
             elif self.bfgs_activate is True:
                 x_k, H_k, s_k, y_k, alpha_k = NewtonOptimizer.bfgs_step(self, x_k, H_k, s_k, y_k, alpha_k, k)
             elif self.l_bfgs_activate is True:
-                x_new, s_k_arr, y_k_arr, rho_k_arr, V_k_arr = NewtonOptimizer.l_bfgs_step(self, x_k, H_0, s_k_arr, y_k_arr, rho_k_arr, V_k_arr, k, self.m_l_bfgs)
+                x_k, s_k_arr, y_k_arr, rho_k_arr, V_k_arr = NewtonOptimizer.l_bfgs_step(self, x_k, H_0, s_k_arr, y_k_arr, rho_k_arr, V_k_arr, k, self.m_l_bfgs)
             else:
                 x_k = NewtonOptimizer.gd_step(self, x_k, k)
 
