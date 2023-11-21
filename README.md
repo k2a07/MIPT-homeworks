@@ -1,2 +1,2 @@
-# MIPT-homeworks
-This is a repository of Kirill Acharya with the Homeworks and Projects which were done while studying at Moscow Institute of Physics and Technology
+# Generative-Models-Homeworks
+This is a branch with the Homeworks and Projects on Generative Models course
